@@ -23,6 +23,7 @@ class Sidebar(ctk.CTkFrame):
             ("add_bill", "记一笔"),
             ("bill_list", "账单列表"),
             ("summary", "统计分析"),
+            ("profile", "消费画像"),
             ("settings", "设置"),
         ]
 

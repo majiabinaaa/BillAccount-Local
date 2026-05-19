@@ -46,12 +46,14 @@ class App(ctk.CTk):
         from ui.pages.add_bill import AddBillPage
         from ui.pages.bill_list import BillListPage
         from ui.pages.summary import SummaryPage
+        from ui.pages.profile import ProfilePage
         from ui.pages.settings import SettingsPage
 
         self.main_window.register_page("dashboard", DashboardPage)
         self.main_window.register_page("add_bill", AddBillPage)
         self.main_window.register_page("bill_list", BillListPage)
         self.main_window.register_page("summary", SummaryPage)
+        self.main_window.register_page("profile", ProfilePage)
         self.main_window.register_page("settings", SettingsPage)
 
     def reload_database(self):
