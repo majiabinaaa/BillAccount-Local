@@ -2,3 +2,4 @@ customtkinter>=5.2.0
 matplotlib>=3.8.0
 pyinstaller>=6.0.0
 pywin32>=305
+reportlab>=4.0

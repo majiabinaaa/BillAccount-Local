@@ -1,3 +1,4 @@
+import os
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 
@@ -97,6 +98,43 @@ class SettingsPage(ctk.CTkFrame):
                        command=lambda: import_json_dialog(self.app)).pack(
             side="left", padx=(0, 8))
 
+        # --- PDF Reports ---
+        report_frame = ctk.CTkFrame(container)
+        report_frame.pack(fill="x", padx=25, pady=(0, 15))
+
+        ctk.CTkLabel(report_frame, text="📮 个性化报告",
+                     font=ctk.CTkFont(size=16, weight="bold")).grid(
+            row=0, column=0, sticky="w", padx=18, pady=(15, 5))
+
+        ctk.CTkLabel(report_frame, text="导出精美 PDF，分享你的财务故事",
+                     font=ctk.CTkFont(size=12),
+                     text_color=("gray40", "gray60")).grid(
+            row=1, column=0, sticky="w", padx=18, pady=(0, 8))
+
+        week_row = ctk.CTkFrame(report_frame, fg_color="transparent")
+        week_row.grid(row=2, column=0, sticky="ew", padx=18, pady=(4, 2))
+        ctk.CTkButton(week_row, text="📅 本周消费手帐", width=160,
+                       command=self._export_weekly_pdf).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(week_row, text="A5 卡片 · 本周数据 + 人格总结 + 成就徽章",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("gray45", "gray55")).pack(side="left")
+
+        month_row = ctk.CTkFrame(report_frame, fg_color="transparent")
+        month_row.grid(row=3, column=0, sticky="ew", padx=18, pady=2)
+        ctk.CTkButton(month_row, text="📆 月度财务护照", width=160,
+                       command=self._export_monthly_pdf).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(month_row, text="A4 护照 · 月度回顾 + 之最榜单 + 下月预测",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("gray45", "gray55")).pack(side="left")
+
+        year_row = ctk.CTkFrame(report_frame, fg_color="transparent")
+        year_row.grid(row=4, column=0, sticky="ew", padx=18, pady=(2, 15))
+        ctk.CTkButton(year_row, text="📊 年度财务故事", width=160,
+                       command=self._export_yearly_pdf).pack(side="left", padx=(0, 8))
+        ctk.CTkLabel(year_row, text="A4 画册 · 年度数据 + 趋势图 + 榜单 + 关键词",
+                     font=ctk.CTkFont(size=11),
+                     text_color=("gray45", "gray55")).pack(side="left")
+
         # --- Danger zone ---
         danger_frame = ctk.CTkFrame(container)
         danger_frame.pack(fill="x", padx=25, pady=(0, 15))
@@ -179,6 +217,77 @@ class SettingsPage(ctk.CTkFrame):
             "成功",
             f"数据路径已更改到:\n{new_path}\n\n当前账单数: {count} 条"
         )
+
+    def _export_weekly_pdf(self):
+        from tkinter import filedialog, messagebox
+        from core.pdf_exporter import generate_weekly_pdf
+        from datetime import date
+        path = filedialog.asksaveasfilename(
+            title="导出本周消费手帐",
+            defaultextension=".pdf",
+            filetypes=[("PDF 文件", "*.pdf")],
+            initialfile=f"本周消费手帐_{date.today().isoformat()}.pdf",
+        )
+        if not path:
+            return
+        try:
+            generate_weekly_pdf(self.app.db, path)
+        except Exception as e:
+            messagebox.showerror("导出失败", str(e))
+            return
+        self._ask_open_file(path)
+
+    def _export_monthly_pdf(self):
+        from tkinter import filedialog, messagebox
+        from core.pdf_exporter import generate_monthly_pdf
+        from datetime import date
+        path = filedialog.asksaveasfilename(
+            title="导出月度财务护照",
+            defaultextension=".pdf",
+            filetypes=[("PDF 文件", "*.pdf")],
+            initialfile=f"月度财务护照_{date.today().strftime('%Y%m')}.pdf",
+        )
+        if not path:
+            return
+        try:
+            generate_monthly_pdf(self.app.db, path)
+        except Exception as e:
+            messagebox.showerror("导出失败", str(e))
+            return
+        self._ask_open_file(path)
+
+    def _export_yearly_pdf(self):
+        from tkinter import filedialog, messagebox
+        from core.pdf_exporter import generate_yearly_pdf
+        from datetime import date
+        path = filedialog.asksaveasfilename(
+            title="导出年度财务故事",
+            defaultextension=".pdf",
+            filetypes=[("PDF 文件", "*.pdf")],
+            initialfile=f"年度财务故事_{date.today().year}.pdf",
+        )
+        if not path:
+            return
+        try:
+            generate_yearly_pdf(self.app.db, path)
+        except Exception as e:
+            messagebox.showerror("导出失败", str(e))
+            return
+        self._ask_open_file(path)
+
+    def _ask_open_file(self, path):
+        from tkinter import messagebox
+        import subprocess, sys
+        if messagebox.askyesno("导出成功", f"PDF 已生成:\n{path}\n\n是否打开查看？"):
+            try:
+                if sys.platform == "win32":
+                    os.startfile(path)
+                elif sys.platform == "darwin":
+                    subprocess.run(["open", path])
+                else:
+                    subprocess.run(["xdg-open", path])
+            except Exception:
+                pass
 
     def _clear_all(self):
         if messagebox.askyesno("确认清空", "确定要清空所有账单数据吗？\n此操作不可撤销！"):
