@@ -30,3 +30,4 @@ build_temp/
 # Virtual env
 venv/
 .venv/
+*.pdf
