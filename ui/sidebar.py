@@ -24,6 +24,7 @@ class Sidebar(ctk.CTkFrame):
             ("bill_list", "账单列表"),
             ("summary", "统计分析"),
             ("profile", "消费画像"),
+            ("export_page", "导出报告"),
             ("settings", "设置"),
         ]
 

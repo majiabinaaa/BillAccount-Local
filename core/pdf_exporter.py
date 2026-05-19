@@ -1,346 +1,367 @@
-"""Beautiful personalized PDF reports: weekly / monthly / yearly."""
+"""Kawaii-style personalized PDF reports — weekly / monthly / yearly."""
 import io
 import os
+import random
 from datetime import date, timedelta
 from pathlib import Path
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, A5
-from reportlab.lib.units import mm, cm
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.units import mm
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table,
-                                 TableStyle, Image, PageBreak, KeepTogether)
+                                 TableStyle, Image, PageBreak)
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.graphics.shapes import Drawing, Rect, String, Line
-from reportlab.graphics.charts.piecharts import Pie
-from reportlab.graphics.charts.barcharts import VerticalBarChart
+from reportlab.graphics.shapes import Drawing, Rect, Circle, Line, String, Group
+from reportlab.graphics import renderPDF
+from reportlab.lib.colors import Color, HexColor
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from core.analytics import calculate_health_score, get_consumer_profile
+from core.analytics import get_consumer_profile
 from core.report_generator import generate_weekly_report
 
-# ==================== Font Setup ====================
+# ==================== Fonts ====================
 
-_FONT_REGISTERED = False
+_FONT_OK = False
 
 
-def _register_fonts():
-    global _FONT_REGISTERED
-    if _FONT_REGISTERED:
-        return
-    font_paths = [
-        "C:/Windows/Fonts/msyh.ttc",
-        "C:/Windows/Fonts/simhei.ttf",
-    ]
-    for fp in font_paths:
+def _setup_fonts():
+    global _FONT_OK
+    if _FONT_OK:
+        return True
+    for fp in ["C:/Windows/Fonts/msyh.ttc", "C:/Windows/Fonts/simhei.ttf"]:
         if os.path.exists(fp):
             try:
                 pdfmetrics.registerFont(TTFont("CJK", fp))
-                pdfmetrics.registerFont(TTFont("CJKBold", fp, subfontIndex=1)
-                                        if fp.endswith(".ttc") else TTFont("CJKBold", fp))
-                _FONT_REGISTERED = True
-                return
+                pdfmetrics.registerFont(TTFont("CJKB", fp, subfontIndex=1)
+                                        if fp.endswith(".ttc") else TTFont("CJKB", fp))
+                _FONT_OK = True
+                return True
             except Exception:
                 continue
-    # fallback: use Helvetica (no CJK but won't crash)
-    _FONT_REGISTERED = True
+    return False
 
 
-# ==================== Color Schemes ====================
+_FONT_OK = _setup_fonts()
+F = "CJK" if _FONT_OK else "Helvetica"
+FB = "CJKB" if _FONT_OK else "Helvetica-Bold"
 
-WEEKLY_COLORS = {
-    "bg": colors.HexColor("#FFF8E1"),
-    "header": colors.HexColor("#FF6F00"),
-    "accent": colors.HexColor("#FFB300"),
-    "text": colors.HexColor("#3E2723"),
-    "card": colors.HexColor("#FFFFFF"),
-    "light": colors.HexColor("#FFECB3"),
-}
+# ==================== Color Palettes ====================
 
-MONTHLY_COLORS = {
-    "bg": colors.HexColor("#E8F5E9"),
-    "header": colors.HexColor("#2E7D32"),
-    "accent": colors.HexColor("#66BB6A"),
-    "text": colors.HexColor("#1B5E20"),
-    "card": colors.HexColor("#FFFFFF"),
-    "light": colors.HexColor("#C8E6C9"),
-}
+# Weekly — warm peach/coral
+W_HDR_TOP = HexColor("#FF8A65")
+W_HDR_BOT = HexColor("#FFAB91")
+W_BG = HexColor("#FFF9F5")
+W_CARD = HexColor("#FFFFFF")
+W_ACCENT = HexColor("#FF7043")
+W_TEXT = HexColor("#4E342E")
+W_SUB = HexColor("#8D6E63")
 
-YEARLY_COLORS = {
-    "bg": colors.HexColor("#E3F2FD"),
-    "header": colors.HexColor("#1565C0"),
-    "accent": colors.HexColor("#42A5F5"),
-    "text": colors.HexColor("#0D47A1"),
-    "card": colors.HexColor("#FFFFFF"),
-    "light": colors.HexColor("#BBDEFB"),
-}
+# Monthly — fresh green/mint
+M_HDR_TOP = HexColor("#66BB6A")
+M_HDR_BOT = HexColor("#A5D6A7")
+M_BG = HexColor("#F5FBF5")
+M_CARD = HexColor("#FFFFFF")
+M_ACCENT = HexColor("#43A047")
+M_TEXT = HexColor("#2E3B2E")
+M_SUB = HexColor("#6B8E6B")
 
-_QUOTES = [
-    "每一笔记账，都是对未来的投资。",
-    "管住钱，就是管住人生。",
-    "你不理财，财不理你。",
-    "记账不是限制，是自由。",
-    "清楚每一分钱的去向，才能掌控生活的方向。",
-    "小账本，大智慧。",
-    "财富积累，从记录开始。",
-    "今天的节约，是明天的底气。",
+# Yearly — dreamy blue/sky
+Y_HDR_TOP = HexColor("#42A5F5")
+Y_HDR_BOT = HexColor("#90CAF9")
+Y_BG = HexColor("#F5F9FD")
+Y_CARD = HexColor("#FFFFFF")
+Y_ACCENT = HexColor("#1E88E5")
+Y_TEXT = HexColor("#1A2B3C")
+Y_SUB = HexColor("#607D8B")
+
+# Category colors for progress bars
+CAT_COLORS = [
+    HexColor("#EF5350"), HexColor("#FF7043"), HexColor("#FFA726"),
+    HexColor("#FFCA28"), HexColor("#66BB6A"), HexColor("#26C6DA"),
+    HexColor("#42A5F5"), HexColor("#7E57C2"), HexColor("#EC407A"),
+    HexColor("#8D6E63"),
 ]
 
-_KEYWORDS_POOL = [
-    "精致", "极简", "烟火气", "自律", "旅行", "成长",
-    "品质", "探索", "温暖", "充实", "专注", "平衡",
-    "积累", "突破", "从容", "热情", "理性", "自由",
-]
+# ==================== Drawing Helpers ====================
+
+def _round_rect(d: Drawing, x, y, w, h, r, fill, stroke=None):
+    """Draw a rounded rectangle."""
+    d.add(Rect(x + r, y, w - 2 * r, h, fillColor=fill, strokeColor=None))
+    d.add(Rect(x, y + r, w, h - 2 * r, fillColor=fill, strokeColor=None))
+    d.add(Circle(x + r, y + r, r, fillColor=fill, strokeColor=None))
+    d.add(Circle(x + w - r, y + r, r, fillColor=fill, strokeColor=None))
+    d.add(Circle(x + r, y + h - r, r, fillColor=fill, strokeColor=None))
+    d.add(Circle(x + w - r, y + h - r, r, fillColor=fill, strokeColor=None))
+    if stroke:
+        d.add(Line(x + r, y, x + w - r, y, strokeColor=stroke, strokeWidth=1))
+        d.add(Line(x + r, y + h, x + w - r, y + h, strokeColor=stroke, strokeWidth=1))
+        d.add(Line(x, y + r, x, y + h - r, strokeColor=stroke, strokeWidth=1))
+        d.add(Line(x + w, y + r, x + w, y + h - r, strokeColor=stroke, strokeWidth=1))
 
 
-# ==================== Chart Helpers ====================
+def _dot_pattern(d: Drawing, x, y, w, h, spacing, color, radius=1.5):
+    """Draw a dot grid pattern."""
+    cx = x
+    while cx < x + w:
+        cy = y
+        while cy < y + h:
+            d.add(Circle(cx, cy, radius, fillColor=color, strokeColor=None))
+            cy += spacing
+        cx += spacing
 
-def _make_pie_chart(data: list, size=(5, 4)) -> io.BytesIO:
-    """Generate a pie chart image, return BytesIO."""
+
+def _star_rating(count, max_count, x, y, size, fill, empty):
+    """Return a Group of star circles."""
+    g = Group()
+    for i in range(max_count):
+        sx = x + i * (size + 4)
+        c = fill if i < count else empty
+        g.add(Circle(sx, y, size / 2, fillColor=c, strokeColor=None))
+    return g
+
+
+def _gradient_header(d: Drawing, w, h, top_color, bot_color):
+    """Add a colored header background with dot decorations."""
+    d.add(Rect(0, 0, w, h, fillColor=top_color, strokeColor=None))
+    # bottom decorative strip in lighter color
+    d.add(Rect(0, 0, w, 6, fillColor=bot_color, strokeColor=None))
+
+
+def _make_chart_image(fig, width, height) -> Image:
+    """Convert matplotlib figure to reportlab Image."""
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=140, bbox_inches="tight",
+                facecolor="white", edgecolor="none")
+    plt.close(fig)
+    buf.seek(0)
+    return Image(buf, width=width, height=height)
+
+
+# ==================== Chart Generators ====================
+
+def _cute_pie_chart(data: list, title: str, size=(5.5, 4)):
     matplotlib.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
     matplotlib.rcParams["axes.unicode_minus"] = False
 
-    fig, ax = plt.subplots(figsize=size, dpi=120)
+    fig, ax = plt.subplots(figsize=size, dpi=140)
     labels = [d[0] for d in data]
     values = [d[1] for d in data]
     pie_colors = ["#EF5350", "#FF7043", "#FFA726", "#FFCA28", "#66BB6A",
-                  "#26C6DA", "#42A5F5", "#7E57C2"]
+                  "#26C6DA", "#42A5F5", "#7E57C2", "#EC407A", "#8D6E63"]
 
     wedges, _, autotexts = ax.pie(
         values, labels=None, autopct="%1.1f%%",
         colors=pie_colors[:len(data)],
-        startangle=90, pctdistance=0.6,
-        textprops={"fontsize": 12, "color": "white", "fontweight": "bold"},
+        startangle=140, pctdistance=0.65,
+        textprops={"fontsize": 11, "color": "white", "fontweight": "bold"},
     )
-    ax.legend(wedges, [f"{l} ¥{v:,.0f}" for l, v in zip(labels, values)],
+    ax.legend(wedges, [f"{l}" for l in labels],
               loc="center left", bbox_to_anchor=(1, 0, 0.5, 1), fontsize=10,
-              title="支出分类", title_fontsize=11)
+              title=title, title_fontsize=12)
     fig.patch.set_facecolor("white")
     ax.set_facecolor("white")
     fig.tight_layout()
-
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=120, bbox_inches="tight")
-    plt.close(fig)
-    buf.seek(0)
-    return buf
+    return fig
 
 
-def _make_line_chart(months: list, incomes: list, expenses: list, size=(8, 3.5)) -> io.BytesIO:
+def _cute_line_chart(months, incomes, expenses, size=(9, 3.5)):
     matplotlib.rcParams["font.sans-serif"] = ["Microsoft YaHei", "SimHei", "DejaVu Sans"]
     matplotlib.rcParams["axes.unicode_minus"] = False
 
-    fig, ax = plt.subplots(figsize=size, dpi=120)
-    ax.plot(months, incomes, "o-", color="#4CAF50", label="收入", linewidth=2, markersize=6)
-    ax.plot(months, expenses, "o-", color="#F44336", label="支出", linewidth=2, markersize=6)
-    ax.fill_between(range(len(months)), incomes, alpha=0.08, color="#4CAF50")
-    ax.fill_between(range(len(months)), expenses, alpha=0.08, color="#F44336")
-    ax.set_xticks(range(len(months)))
-    ax.set_xticklabels(months, fontsize=10, rotation=30)
-    ax.legend(fontsize=11, loc="upper left")
-    ax.set_ylabel("金额 (元)", fontsize=10)
-    ax.grid(axis="y", alpha=0.3)
+    fig, ax = plt.subplots(figsize=size, dpi=140)
+    x = range(len(months))
+    ax.plot(x, incomes, "o-", color="#66BB6A", label="收入", linewidth=2.5, markersize=7)
+    ax.plot(x, expenses, "o-", color="#EF5350", label="支出", linewidth=2.5, markersize=7)
+    for i in x:
+        if incomes[i] > 0:
+            ax.text(i, incomes[i] + max(incomes) * 0.03, f"¥{incomes[i]:,.0f}",
+                    ha="center", fontsize=8, color="#388E3C", fontweight="bold")
+        if expenses[i] > 0:
+            ax.text(i, expenses[i] + max(expenses) * 0.03, f"¥{expenses[i]:,.0f}",
+                    ha="center", fontsize=8, color="#D32F2F", fontweight="bold")
+    ax.fill_between(x, incomes, alpha=0.06, color="#66BB6A")
+    ax.fill_between(x, expenses, alpha=0.06, color="#EF5350")
+    ax.set_xticks(x)
+    ax.set_xticklabels(months, fontsize=10, rotation=0)
+    ax.legend(fontsize=12, loc="upper left", framealpha=0.8)
+    ax.grid(axis="y", alpha=0.2, color="#BDBDBD")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
     fig.patch.set_facecolor("white")
     ax.set_facecolor("white")
     fig.tight_layout()
-
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=120, bbox_inches="tight")
-    plt.close(fig)
-    buf.seek(0)
-    return buf
+    return fig
 
 
-# ==================== Style Helpers ====================
+# ==================== Styles ====================
 
-def _get_styles():
-    styles = getSampleStyleSheet()
-    _register_fonts()
-    font_name = "CJK" if _FONT_REGISTERED else "Helvetica"
-    bold_name = "CJKBold" if _FONT_REGISTERED else "Helvetica-Bold"
-
-    styles.add(ParagraphStyle(
-        "CTitle", fontName=bold_name, fontSize=24, leading=32,
-        alignment=TA_CENTER, textColor=colors.white,
-    ))
-    styles.add(ParagraphStyle(
-        "CSubtitle", fontName=font_name, fontSize=11, leading=16,
-        alignment=TA_CENTER, textColor=colors.white,
-    ))
-    styles.add(ParagraphStyle(
-        "CSection", fontName=bold_name, fontSize=15, leading=22,
-        textColor=colors.HexColor("#333333"), spaceAfter=6,
-    ))
-    styles.add(ParagraphStyle(
-        "CBody", fontName=font_name, fontSize=11, leading=18,
-        textColor=colors.HexColor("#444444"),
-    ))
-    styles.add(ParagraphStyle(
-        "CBig", fontName=bold_name, fontSize=28, leading=36,
-        textColor=colors.HexColor("#333333"),
-    ))
-    styles.add(ParagraphStyle(
-        "CNote", fontName=font_name, fontSize=10, leading=15,
-        textColor=colors.HexColor("#777777"), alignment=TA_CENTER,
-    ))
-    styles.add(ParagraphStyle(
-        "CQuote", fontName=font_name, fontSize=11, leading=18,
-        textColor=colors.HexColor("#555555"), alignment=TA_CENTER,
-    ))
-    return styles
+def _ss():
+    """Get fresh styles each time (some are mutated)."""
+    from reportlab.lib.styles import getSampleStyleSheet
+    base = getSampleStyleSheet()
+    base.add(ParagraphStyle("H1", fontName=FB, fontSize=22, leading=28,
+                            textColor=colors.white, alignment=TA_CENTER))
+    base.add(ParagraphStyle("H2", fontName=FB, fontSize=16, leading=22,
+                            textColor=colors.HexColor("#333333")))
+    base.add(ParagraphStyle("H3", fontName=FB, fontSize=13, leading=18,
+                            textColor=colors.HexColor("#444444")))
+    base.add(ParagraphStyle("BODY", fontName=F, fontSize=11, leading=18,
+                            textColor=colors.HexColor("#555555")))
+    base.add(ParagraphStyle("SMALL", fontName=F, fontSize=8, leading=12,
+                            textColor=colors.HexColor("#999999"), alignment=TA_CENTER))
+    base.add(ParagraphStyle("QUOTE", fontName=F, fontSize=12, leading=20,
+                            textColor=colors.HexColor("#777777"), alignment=TA_CENTER))
+    base.add(ParagraphStyle("RIGHT", fontName=F, fontSize=10, leading=14,
+                            textColor=colors.HexColor("#999999"), alignment=TA_RIGHT))
+    return base
 
 
-def _header_table(title: str, subtitle: str, color_scheme: dict) -> Table:
-    """Generate a colored header block."""
-    data = [[
-        Table([[title]], colWidths=[460], rowHeights=[50]),
-    ], [
-        Table([[subtitle]], colWidths=[460], rowHeights=[20]),
-    ]]
-    t = Table(data, colWidths=[480])
+def _card_table(html: str, accent: HexColor, width: int) -> Table:
+    ss = _ss()
+    t = Table([[Paragraph(html, ss["BODY"])]], colWidths=[width - 32])
     t.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), color_scheme["header"]),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING", (0, 0), (-1, -1), 0),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-        ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
-    ]))
-    return t
-
-
-def _card(content: str, color_scheme: dict, width: int = 460) -> Table:
-    """White card with shadow effect (using border)."""
-    styles = _get_styles()
-    data = [[Paragraph(content, styles["CBody"])]]
-    t = Table(data, colWidths=[width])
-    t.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), color_scheme["card"]),
-        ("BOX", (0, 0), (-1, -1), 0.5, color_scheme["light"]),
-        ("TOPPADDING", (0, 0), (-1, -1), 12),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.white),
         ("LEFTPADDING", (0, 0), (-1, -1), 16),
         ("RIGHTPADDING", (0, 0), (-1, -1), 16),
+        ("TOPPADDING", (0, 0), (-1, -1), 14),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
+        ("ROUNDEDCORNERS", [8, 8, 8, 8]),
+        ("BOX", (0, 0), (-1, -1), 1, accent),
     ]))
     return t
+
+
+def _dots_divider(width: int, color) -> Drawing:
+    d = Drawing(width, 12)
+    for i in range(0, width, 8):
+        d.add(Circle(i + 4, 6, 1.5, fillColor=color, strokeColor=None))
+    return d
 
 
 # ==================================================================
-#   WEEKLY PDF — 本周消费手帐
+#   WEEKLY — 正方形社交卡 500×500pt
 # ==================================================================
 
 def generate_weekly_pdf(db, filepath: str):
-    _register_fonts()
-    font_name = "CJK" if _FONT_REGISTERED else "Helvetica"
-    bold_name = "CJKBold" if _FONT_REGISTERED else "Helvetica-Bold"
-    cs = WEEKLY_COLORS
-    styles = _get_styles()
+    _setup_fonts()
+    ss = _ss()
     report = generate_weekly_report(db, 0)
 
-    doc = SimpleDocTemplate(filepath, pagesize=A5,  # 420 x 595 pt
-                            leftMargin=20, rightMargin=20,
-                            topMargin=15, bottomMargin=15)
+    W, H = 500, 500
+    doc = SimpleDocTemplate(filepath, pagesize=(W, H),
+                            leftMargin=24, rightMargin=24,
+                            topMargin=24, bottomMargin=24)
     story = []
 
-    # --- Header ---
-    week_label = report["week_label"] if report else f"{date.today().month}/{date.today().day}"
-    header_data = [[
-        Paragraph(f"🌟 MY WEEK IN MONEY", styles["CTitle"]),
-    ], [
-        Paragraph(week_label, styles["CSubtitle"]),
-    ]]
-    ht = Table(header_data, colWidths=[380])
-    ht.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), cs["header"]),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("TOPPADDING", (0, 0), (-1, -1), 18),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 18),
-        ("ROUNDEDCORNERS", [8, 8, 8, 8]),
-    ]))
-    story.append(ht)
-    story.append(Spacer(1, 12))
+    # --- Header with gradient ---
+    hdr = Drawing(W - 48, 72)
+    _gradient_header(hdr, W - 48, 72, W_HDR_TOP, W_HDR_BOT)
+    # decorative dots in header
+    _dot_pattern(hdr, 10, 55, W - 68, 12, 14, HexColor("#FFFFFF44"), 2)
+    # emoji
+    hdr.add(String((W - 48) / 2 - 90, 42, "🌟 一周消费手帐 🌟",
+                   fontName=FB, fontSize=18, fillColor=colors.white,
+                   textAnchor="middle"))
+    week_label = report["week_label"] if report else date.today().isoformat()
+    hdr.add(String((W - 48) / 2, 16, week_label,
+                   fontName=F, fontSize=10, fillColor=HexColor("#FFFFFFCC"),
+                   textAnchor="middle"))
+    story.append(hdr)
+    story.append(Spacer(1, 10))
 
-    if not report:
-        story.append(Paragraph("本周暂无记账数据，快去记一笔吧！", styles["CBody"]))
+    if not report or (report["total_income"] == 0 and report["total_expense"] == 0):
+        story.append(Paragraph("📝 这周还没有记账哦～", ss["BODY"]))
+        story.append(Paragraph("开始记录你的第一笔消费吧！", ss["QUOTE"]))
         doc.build(story)
         return
 
-    # --- Summary cards ---
+    # --- Summary row ---
+    bal = report["balance"]
     summary_html = (
-        f"💰 总收入　<b>¥{report['total_income']:,.0f}</b><br/>"
-        f"💸 总支出　<b>¥{report['total_expense']:,.0f}</b><br/>"
-        f"🏦 结　　余　<b>{'+' if report['balance'] >= 0 else '-'}¥{abs(report['balance']):,.0f}</b><br/>"
-        f"📊 储蓄率　<b>{report['savings_rate']:.1f}%</b>"
+        f"💰 收入 <b>¥{report['total_income']:,.0f}</b>　"
+        f"💸 支出 <b>¥{report['total_expense']:,.0f}</b>　"
+        f"{'😊' if bal >= 0 else '😰'} 结余 <b>{'+' if bal >= 0 else '-'}¥{abs(bal):,.0f}</b>"
     )
-    story.append(_card(summary_html, cs))
-    story.append(Spacer(1, 10))
+    story.append(_card_table(summary_html, W_ACCENT, W - 48))
+    story.append(Spacer(1, 8))
 
     # --- Pie chart ---
-    cat_data = db.get_category_summary(
-        report["week_start"], report["week_end"], "expense")
-    if cat_data:
-        buf = _make_pie_chart(cat_data, size=(4.5, 3.2))
-        img = Image(buf, width=360, height=256)
+    cat_data = db.get_category_summary(report["week_start"], report["week_end"], "expense")
+    if cat_data and sum(v for _, v in cat_data) > 0:
+        fig = _cute_pie_chart(cat_data, "钱去哪了？", size=(4.8, 3.2))
+        img = _make_chart_image(fig, W - 60, int((W - 60) * 0.65))
         story.append(img)
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, 8))
+
+    # --- Category bars ---
+    if cat_data:
+        total_exp = sum(v for _, v in cat_data)
+        bars_html = ""
+        for i, (name, val) in enumerate(cat_data[:5]):
+            pct = val / total_exp * 100 if total_exp > 0 else 0
+            bar_len = int(pct / 100 * 30)
+            bar = "█" * bar_len + "░" * (30 - bar_len)
+            color_icon = ["🍜", "🚗", "🛍", "🏠", "🎬", "💊", "📚", "📱", "✨"][i % 9]
+            bars_html += f"{color_icon} {name} {bar} {pct:.0f}%<br/>"
+        story.append(_card_table(bars_html, W_ACCENT, W - 48))
+        story.append(Spacer(1, 8))
 
     # --- Personality ---
     profile = get_consumer_profile(db)
-    personality_html = (
-        f"🎭 本周人格<br/>"
-        f"　　<b>{profile['emoji']} {profile['title']}</b><br/>"
-        f"　　{profile['desc'][:80]}..."
+    pers_html = (
+        f"🎭 这周你是 <b>{profile['emoji']}「{profile['title']}」</b><br/>"
+        f"　　{profile['desc'][:70]}..."
     )
-    story.append(_card(personality_html, cs))
-    story.append(Spacer(1, 10))
-
-    # --- Achievements ---
-    achievements = []
-    if report["record_days"] == report["checked_days"]:
-        achievements.append(f"⭐ 连续记账 {report['record_days']} 天")
-    if report["savings_rate"] > 50:
-        achievements.append(f"⭐ 储蓄率 > 50%")
-    if report["balance"] < 0:
-        achievements.append("⚠️ 入不敷出，下周加油")
-
-    for t in report.get("trends", [])[:3]:
-        if t["direction"] == "down":
-            achievements.append(f"⭐ {t['category']}支出 ↓{t['change_pct']}%")
-
-    if achievements:
-        ach_html = "🏆 本周成就<br/>" + "<br/>".join(f"　　{a}" for a in achievements)
-        story.append(_card(ach_html, cs))
-        story.append(Spacer(1, 10))
-
-    # --- Quote ---
-    import random
-    quote = random.choice(_QUOTES)
-    story.append(_card(f"💬<br/>「{quote}」", cs))
+    story.append(_card_table(pers_html, W_ACCENT, W - 48))
     story.append(Spacer(1, 8))
 
-    # --- Footer ---
-    story.append(Paragraph("记账本 · 用心记录每一笔", styles["CNote"]))
+    # --- Achievements ---
+    ach_list = []
+    if report["record_days"] == report["checked_days"]:
+        ach_list.append(f"🌟 连续记账 {report['record_days']} 天，太自律了！")
+    if report["savings_rate"] > 50:
+        ach_list.append(f"💎 储蓄率 {report['savings_rate']:.0f}%，超过 80% 的人")
+    if report["savings_rate"] > 30:
+        ach_list.append(f"👍 存下了 {report['savings_rate']:.0f}% 的收入")
+    for t in report.get("trends", [])[:2]:
+        if t["direction"] == "down":
+            ach_list.append(f"📉 {t['category']}比上周少了 {t['change_pct']}%，省钱小能手！")
+    if report["balance"] < 0:
+        ach_list.append(f"⚠️ 这周花超了，下周加油哦～")
+
+    if ach_list:
+        ach_html = "🏆 本周成就<br/>" + "<br/>".join(f"　　{a}" for a in ach_list)
+        story.append(_card_table(ach_html, W_ACCENT, W - 48))
+        story.append(Spacer(1, 8))
+
+    # --- Quote ---
+    quotes = [
+        "「花得明白，存得踏实」",
+        "「今天的节约，是明天的浪漫」",
+        "「每一笔记账，都是对未来的温柔」",
+        "「钱是用来让生活更好的，不是让生活更累的」",
+        "「小账本里藏着大智慧」",
+    ]
+    story.append(Paragraph(random.choice(quotes), ss["QUOTE"]))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph("记账本 · 用心记录每一笔 💕", ss["SMALL"]))
 
     doc.build(story)
 
 
 # ==================================================================
-#   MONTHLY PDF — 月度财务护照
+#   MONTHLY — A5 护照风 420×595pt
 # ==================================================================
 
 def generate_monthly_pdf(db, filepath: str):
-    _register_fonts()
-    font_name = "CJK" if _FONT_REGISTERED else "Helvetica"
-    bold_name = "CJKBold" if _FONT_REGISTERED else "Helvetica-Bold"
-    cs = MONTHLY_COLORS
-    styles = _get_styles()
-
+    _setup_fonts()
+    ss = _ss()
     today = date.today()
     month_start = today.replace(day=1)
     if today.month == 12:
@@ -349,235 +370,244 @@ def generate_monthly_pdf(db, filepath: str):
         month_end = today.replace(month=today.month + 1, day=1) - timedelta(days=1)
 
     ms = db.get_summary(month_start, month_end)
-    health = calculate_health_score(db)
     profile = get_consumer_profile(db)
+    month_name = today.strftime("%B").upper()
 
-    doc = SimpleDocTemplate(filepath, pagesize=A4,
-                            leftMargin=25, rightMargin=25,
-                            topMargin=20, bottomMargin=20)
+    W, H = 420, 595
+    doc = SimpleDocTemplate(filepath, pagesize=(W, H),
+                            leftMargin=20, rightMargin=20,
+                            topMargin=18, bottomMargin=18)
     story = []
 
-    # --- Header (passport style) ---
-    import locale
-    try:
-        locale.setlocale(locale.LC_TIME, "en_US.UTF-8")
-    except Exception:
-        pass
-    month_name_en = today.strftime("%B").upper()
-    month_name_cn = f"{today.year}年{today.month}月"
-
-    header_data = [[
-        Paragraph(f"FINANCIAL PASSPORT", styles["CTitle"]),
-    ], [
-        Paragraph(f"{month_name_en}  ·  {month_name_cn}", styles["CSubtitle"]),
-    ]]
-    ht = Table(header_data, colWidths=[545])
-    ht.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), cs["header"]),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("TOPPADDING", (0, 0), (-1, -1), 22),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 22),
-        ("ROUNDEDCORNERS", [8, 8, 8, 8]),
-    ]))
-    story.append(ht)
-    story.append(Spacer(1, 14))
-
-    # --- Month summary ---
-    summary_html = (
-        f"📊 月度回顾<br/><br/>"
-        f"总收入　<b>¥{ms.total_income:,.0f}</b><br/>"
-        f"总支出　<b>¥{ms.total_expense:,.0f}</b><br/>"
-        f"结　　余　<b>{'+' if ms.balance >= 0 else '-'}¥{abs(ms.balance):,.0f}</b><br/>"
-        f"储蓄率　<b>{(ms.balance / ms.total_income * 100) if ms.total_income > 0 else 0:.1f}%</b>"
-    )
-    story.append(_card(summary_html, cs))
+    # --- Cover header ---
+    hdr = Drawing(W - 40, 90)
+    _gradient_header(hdr, W - 40, 90, M_HDR_TOP, M_HDR_BOT)
+    hdr.add(String((W - 40) / 2, 55, "FINANCIAL PASSPORT",
+                   fontName=FB, fontSize=20, fillColor=colors.white,
+                   textAnchor="middle"))
+    hdr.add(String((W - 40) / 2, 30, f"{month_name}  ·  {today.year}年{today.month}月",
+                   fontName=F, fontSize=11, fillColor=HexColor("#FFFFFFDD"),
+                   textAnchor="middle"))
+    _dot_pattern(hdr, 15, 10, W - 70, 8, 10, HexColor("#FFFFFF33"), 1.5)
+    story.append(hdr)
     story.append(Spacer(1, 10))
+
+    # --- Monthly numbers ---
+    bal = ms.balance
+    sr = (ms.balance / ms.total_income * 100) if ms.total_income > 0 else 0
+    star_count = 5 if sr > 60 else 4 if sr > 40 else 3 if sr > 20 else 2 if sr > 0 else 1
+    stars = "⭐" * star_count + "☆" * (5 - star_count)
+
+    num_html = (
+        f"📊 月度回顾<br/><br/>"
+        f"💰 收入 <b>¥{ms.total_income:,.0f}</b>　"
+        f"💸 支出 <b>¥{ms.total_expense:,.0f}</b><br/>"
+        f"🏦 结余 <b>{'+' if bal >= 0 else '-'}¥{abs(bal):,.0f}</b>　"
+        f"📈 储蓄率 <b>{sr:.1f}%</b><br/>"
+        f"财务健康 {stars} ({'优秀' if sr > 40 else '良好' if sr > 20 else '加油'})"
+    )
+    story.append(_card_table(num_html, M_ACCENT, W - 40))
+    story.append(Spacer(1, 8))
 
     # --- Pie chart ---
     cat_data = db.get_category_summary(month_start, month_end, "expense")
-    if cat_data:
-        buf = _make_pie_chart(cat_data, size=(5.5, 3.5))
-        img = Image(buf, width=430, height=274)
+    if cat_data and sum(v for _, v in cat_data) > 0:
+        fig = _cute_pie_chart(cat_data, f"{today.month}月支出", size=(5, 3.5))
+        img = _make_chart_image(fig, W - 50, int((W - 50) * 0.7))
         story.append(img)
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, 8))
 
     # --- Personality ---
-    personality_html = (
-        f"🎭 本月人格<br/>"
+    pers_html = (
+        f"🎭 本月消费人格<br/>"
         f"　　<b>{profile['emoji']} {profile['title']}</b><br/>"
         f"　　{profile['desc']}"
     )
-    story.append(_card(personality_html, cs))
-    story.append(Spacer(1, 10))
+    story.append(_card_table(pers_html, M_ACCENT, W - 40))
+    story.append(Spacer(1, 8))
 
     # --- Month's best ---
-    bills = db.get_bills(start_date=month_start, end_date=month_end, bill_type="expense",
-                         limit=200)
-    biggest_expense = None
-    day_totals = {}
+    bills = db.get_bills(start_date=month_start, end_date=month_end,
+                         bill_type="expense", limit=300)
+    biggest = None
+    day_spending = {}
     for b in bills:
-        if biggest_expense is None or b.amount > biggest_expense.amount:
-            biggest_expense = b
-        day_key = b.bill_date.isoformat() if hasattr(b.bill_date, "isoformat") else str(b.bill_date)
-        day_totals[day_key] = day_totals.get(day_key, 0) + b.amount
+        if biggest is None or b.amount > biggest.amount:
+            biggest = b
+        dk = b.bill_date.isoformat() if hasattr(b.bill_date, "isoformat") else str(b.bill_date)
+        day_spending[dk] = day_spending.get(dk, 0) + b.amount
 
-    cheapest_day = min(day_totals.items(), key=lambda x: x[1]) if day_totals else ("-", 0)
-
-    # best category (biggest drop vs target)
     best_html = "🏅 月度之最<br/>"
-    if biggest_expense:
+    if biggest:
         best_html += (
-            f"　　🥇 最大开销: {biggest_expense.category_name or '未分类'} "
-            f"¥{biggest_expense.amount:,.0f}<br/>"
+            f"　　🥇 最大开销: {biggest.category_name or '未分类'}"
+            f" ¥{biggest.amount:,.0f}<br/>"
         )
-    if cheapest_day[1] > 0:
-        best_html += f"　　🥈 最省日: {cheapest_day[0]} 仅 ¥{cheapest_day[1]:,.0f}<br/>"
-    best_html += f"　　🥉 财务健康评分: {health['score']}/100 · {health['label']}"
-    story.append(_card(best_html, cs))
-    story.append(Spacer(1, 10))
+    if day_spending:
+        cheapest = min(day_spending.items(), key=lambda x: x[1])
+        best_html += f"　　🥈 最省日: {cheapest[0]} 仅 ¥{cheapest[1]:,.0f}<br/>"
+    # find category that dropped the most vs nothing — just show top saving tip
+    if cat_data:
+        best_html += f"　　🥉 支出TOP1: {cat_data[0][0]} ¥{cat_data[0][1]:,.0f}"
+    story.append(_card_table(best_html, M_ACCENT, W - 40))
+    story.append(Spacer(1, 8))
 
     # --- Projection ---
-    daily_avg = ms.total_expense / max((today - month_start).days, 1)
+    days_passed = max((today - month_start).days, 1)
+    daily_avg = ms.total_expense / days_passed
     projected = daily_avg * ((month_end - month_start).days + 1)
     proj_html = (
         f"📈 下月预测<br/><br/>"
-        f"按当前日均支出 ¥{daily_avg:,.0f} 推算，<br/>"
+        f"日均支出 ¥{daily_avg:,.0f}，按此节奏<br/>"
         f"下月预计支出 <b>¥{projected:,.0f}</b>"
     )
-    story.append(_card(proj_html, cs))
-    story.append(Spacer(1, 10))
+    story.append(_card_table(proj_html, M_ACCENT, W - 40))
+    story.append(Spacer(1, 8))
 
     # --- Advice ---
-    story.append(_card(f"💡 理财小建议<br/><br/>{profile['suggestion']}", cs))
-    story.append(Spacer(1, 10))
-    story.append(Paragraph("记账本 · 用心记录每一笔", styles["CNote"]))
+    story.append(_card_table(f"💡 Tips<br/><br/>{profile['suggestion']}", M_ACCENT, W - 40))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph("记账本 · 用心记录每一笔 💚", ss["SMALL"]))
 
     doc.build(story)
 
 
 # ==================================================================
-#   YEARLY PDF — 年度财务故事
+#   YEARLY — A4 画册
 # ==================================================================
 
 def generate_yearly_pdf(db, filepath: str):
-    _register_fonts()
-    font_name = "CJK" if _FONT_REGISTERED else "Helvetica"
-    bold_name = "CJKBold" if _FONT_REGISTERED else "Helvetica-Bold"
-    cs = YEARLY_COLORS
-    styles = _get_styles()
-
+    _setup_fonts()
+    ss = _ss()
     today = date.today()
     year_start = date(today.year, 1, 1)
     year_end = date(today.year, 12, 31)
 
     ys = db.get_summary(year_start, min(year_end, today))
-    health = calculate_health_score(db)
     profile = get_consumer_profile(db)
+    cat_data = db.get_category_summary(year_start, today, "expense")
 
     doc = SimpleDocTemplate(filepath, pagesize=A4,
-                            leftMargin=25, rightMargin=25,
-                            topMargin=20, bottomMargin=20)
+                            leftMargin=30, rightMargin=30,
+                            topMargin=24, bottomMargin=24)
     story = []
 
-    # --- Hero cover ---
-    cover_data = [[
-        Paragraph(f"{today.year}", styles["CBig"]),
-    ], [
-        Paragraph("MY MONEY STORY", styles["CTitle"]),
-    ], [
-        Paragraph("记账本 荣誉出品", styles["CSubtitle"]),
-    ]]
-    ct = Table(cover_data, colWidths=[545])
-    ct.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), cs["header"]),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("TOPPADDING", (0, 0), (-1, -1), 30),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 30),
-        ("ROUNDEDCORNERS", [8, 8, 8, 8]),
-    ]))
-    story.append(ct)
-    story.append(Spacer(1, 14))
+    W = A4[0] - 60  # usable width
 
-    # --- Year stats ---
+    # --- Cover ---
+    hdr = Drawing(W, 120)
+    _gradient_header(hdr, W, 120, Y_HDR_TOP, Y_HDR_BOT)
+    hdr.add(String(W / 2, 80, str(today.year),
+                   fontName=FB, fontSize=42, fillColor=colors.white,
+                   textAnchor="middle"))
+    hdr.add(String(W / 2, 48, "MY MONEY STORY",
+                   fontName=FB, fontSize=22, fillColor=colors.white,
+                   textAnchor="middle"))
+    hdr.add(String(W / 2, 22, "年度财务回忆录 · 记账本荣誉出品",
+                   fontName=F, fontSize=10, fillColor=HexColor("#FFFFFFCC"),
+                   textAnchor="middle"))
+    _dot_pattern(hdr, 30, 100, W - 60, 8, 16, HexColor("#FFFFFF33"), 2)
+    story.append(hdr)
+    story.append(Spacer(1, 16))
+
+    # --- Year in Numbers ---
     months_passed = today.month
+    sr = (ys.balance / ys.total_income * 100) if ys.total_income > 0 else 0
     monthly_avg = ys.total_expense / max(months_passed, 1)
-    stats_html = (
-        f"📊 年度数据<br/><br/>"
-        f"总收入　<b>¥{ys.total_income:,.0f}</b><br/>"
-        f"总支出　<b>¥{ys.total_expense:,.0f}</b><br/>"
-        f"净储蓄　<b>¥{ys.balance:,.0f}</b><br/>"
-        f"月均支出 <b>¥{monthly_avg:,.0f}</b>"
-    )
-    story.append(_card(stats_html, cs))
-    story.append(Spacer(1, 10))
 
-    # --- Monthly trend chart ---
+    num_html = (
+        f"📊 {today.year} · 年度数据<br/><br/>"
+        f"💰 总收入 <b>¥{ys.total_income:,.0f}</b><br/>"
+        f"💸 总支出 <b>¥{ys.total_expense:,.0f}</b><br/>"
+        f"🏦 净储蓄 <b>¥{ys.balance:,.0f}</b><br/>"
+        f"📈 储蓄率 <b>{sr:.1f}%</b> · 月均支出 <b>¥{monthly_avg:,.0f}</b>"
+    )
+    story.append(_card_table(num_html, Y_ACCENT, W))
+    story.append(Spacer(1, 12))
+
+    # --- Monthly trend ---
     months_labels, incomes, expenses = [], [], []
     for m in range(1, today.month + 1):
         ms = date(today.year, m, 1)
-        if m == 12:
-            me = date(today.year, 12, 31)
-        else:
-            me = date(today.year, m + 1, 1) - timedelta(days=1)
+        me = (date(today.year, m + 1, 1) - timedelta(days=1) if m < 12
+              else date(today.year, 12, 31))
         s = db.get_summary(ms, me)
         months_labels.append(f"{m}月")
         incomes.append(s.total_income)
         expenses.append(s.total_expense)
 
-    if months_labels:
-        buf = _make_line_chart(months_labels, incomes, expenses)
-        img = Image(buf, width=480, height=210)
+    if months_labels and any(v > 0 for v in incomes + expenses):
+        fig = _cute_line_chart(months_labels, incomes, expenses, size=(9.5, 3.8))
+        img = _make_chart_image(fig, W - 10, int((W - 10) * 0.4))
         story.append(img)
-        story.append(Spacer(1, 10))
+        story.append(Spacer(1, 12))
 
     # --- Year personality ---
-    personality_html = (
-        f"🎭 年度消费人格<br/>"
-        f"　　<b>{profile['emoji']} {profile['title']}</b><br/>"
+    pers_html = (
+        f"🎭 年度消费人格<br/><br/>"
+        f"　　{profile['emoji']} <b>{profile['title']}</b><br/>"
         f"　　{profile['desc']}<br/>"
-        f"　　储蓄率 {profile['savings_rate']}%，"
-        f"{'超过' if profile['savings_rate'] > 20 else '低于'}全国平均"
+        f"　　储蓄率 {sr:.1f}%，{'超过' if sr > 20 else '略低于'}全国平均水平"
     )
-    story.append(_card(personality_html, cs))
-    story.append(Spacer(1, 10))
+    story.append(_card_table(pers_html, Y_ACCENT, W))
+    story.append(Spacer(1, 12))
 
     # --- Year ranking ---
-    cat_data = db.get_category_summary(year_start, today, "expense")
-    ranking_html = "🏆 年度榜单<br/>"
-    medals = ["🥇", "🥈", "🥉"]
-    for i, (name, val) in enumerate(cat_data[:3]):
-        ranking_html += f"　　{medals[i]} {name}: ¥{val:,.0f}<br/>"
+    medals = ["🥇", "🥈", "🥉", "④", "⑤"]
+    rank_html = "🏆 年度消费榜单<br/><br/>"
+    for i, (name, val) in enumerate(cat_data[:5]):
+        rank_html += f"　　{medals[i]} {name}: <b>¥{val:,.0f}</b><br/>"
 
-    # find biggest spending day
-    bills = db.get_bills(start_date=year_start, end_date=today, bill_type="expense",
-                         limit=500)
+    # biggest spending day
+    bills = db.get_bills(start_date=year_start, end_date=today,
+                         bill_type="expense", limit=500)
     day_total = {}
     for b in bills:
         dk = b.bill_date.isoformat() if hasattr(b.bill_date, "isoformat") else str(b.bill_date)
         day_total[dk] = day_total.get(dk, 0) + b.amount
     if day_total:
         max_day = max(day_total, key=day_total.get)
-        ranking_html += f"　　📅 最贵单日: {max_day} (¥{day_total[max_day]:,.0f})"
-    story.append(_card(ranking_html, cs))
-    story.append(Spacer(1, 10))
+        rank_html += f"<br/>　　📅 年度最贵单日: {max_day}<br/>"
+        rank_html += f"　　　　那天花了 <b>¥{day_total[max_day]:,.0f}</b> 😱"
+    story.append(_card_table(rank_html, Y_ACCENT, W))
+    story.append(Spacer(1, 12))
+
+    # --- Fun facts ---
+    facts = []
+    if cat_data:
+        top_cat = cat_data[0]
+        if top_cat[0] == "餐饮" and top_cat[1] > 5000:
+            meals = int(top_cat[1] / 35)
+            facts.append(f"🍜 你今年吃掉了约 {meals} 顿饭，平均 ¥35/顿")
+        if top_cat[0] == "交通" and top_cat[1] > 3000:
+            facts.append(f"🚗 交通花了 ¥{top_cat[1]:,.0f}，够绕地球好几圈了")
+        if monthly_avg > 1000:
+            facts.append(f"💡 月均支出 ¥{monthly_avg:,.0f}，每天约 ¥{monthly_avg / 30:,.0f}")
+
+    facts.append(f"📝 你已经坚持记账 {months_passed} 个月，真了不起！")
+
+    if facts:
+        story.append(_card_table("🎲 趣味数据<br/><br/>" + "<br/>".join(f"　　{f}" for f in facts),
+                                 Y_ACCENT, W))
+        story.append(Spacer(1, 12))
 
     # --- Keywords ---
-    import random
-    keywords = random.sample(_KEYWORDS_POOL, 3)
-    kw_html = f"💎 年度关键词<br/><br/>　　「{'」  「'.join(keywords)}」"
-    story.append(_card(kw_html, cs))
-    story.append(Spacer(1, 10))
+    kw_pool = ["精致", "自律", "烟火气", "成长", "从容", "热情", "自由",
+               "积累", "探索", "温暖", "突破", "理性", "平衡", "极简"]
+    kws = random.sample(kw_pool, min(3, len(kw_pool)))
+    kw_html = f"💎 {today.year} 年度关键词<br/><br/>　　「{'」  「'.join(kws)}」"
+    story.append(_card_table(kw_html, Y_ACCENT, W))
+    story.append(Spacer(1, 12))
 
     # --- New year advice ---
-    top_cat = cat_data[0] if cat_data else ("未分类", 0)
-    total_exp = sum(v for _, v in cat_data)
-    top_pct = round(top_cat[1] / total_exp * 100) if total_exp > 0 else 0
     advice = profile["suggestion"]
-    if top_pct > 30:
-        advice += f"\n\n{top_cat[0]}占比达 {top_pct}%，略高。建议设定月预算 ¥{top_cat[1] / max(months_passed, 1) * 0.8:,.0f}。"
-    story.append(_card(f"📝 新年理财建议<br/><br/>{advice}", cs))
-    story.append(Spacer(1, 10))
-
-    story.append(Paragraph("记账本 · 用心记录每一笔", styles["CNote"]))
+    top_cat = cat_data[0] if cat_data else ("未分类", 0)
+    total_exp = sum(v for _, v in cat_data) if cat_data else 0
+    top_pct = round(top_cat[1] / total_exp * 100) if total_exp > 0 else 0
+    if top_pct > 35:
+        advice += f"\n\n{top_cat[0]}占比达 {top_pct}%，可以适当控制一下哦～"
+    story.append(_card_table(f"📝 新年理财Tips<br/><br/>{advice}", Y_ACCENT, W))
+    story.append(Spacer(1, 8))
+    story.append(Paragraph("记账本 · 用心记录你的每一年 💙", ss["SMALL"]))
 
     doc.build(story)
