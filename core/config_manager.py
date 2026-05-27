@@ -1,19 +1,49 @@
 import json
 import os
 import sys
+import traceback
 from pathlib import Path
 
 
 def _get_app_dir() -> Path:
     """Get the directory where config and data files should be stored."""
     if getattr(sys, "frozen", False):
+        # Try multiple methods to find the real .exe directory
+        candidates = []
+
+        # Method 1: Windows API - most reliable
         try:
             import ctypes
             buf = ctypes.create_unicode_buffer(512)
             ctypes.windll.kernel32.GetModuleFileNameW(None, buf, 512)
-            return Path(buf.value).parent
+            exe_path = Path(buf.value)
+            candidates.append(exe_path.parent)
         except Exception:
-            return Path(os.path.dirname(os.path.abspath(sys.argv[0])))
+            pass
+
+        # Method 2: sys.argv[0]
+        try:
+            candidates.append(Path(sys.argv[0]).resolve().parent)
+        except Exception:
+            pass
+
+        # Method 3: current working directory
+        candidates.append(Path(os.getcwd()))
+
+        # Pick the first directory that either has config.json or is writable
+        for d in candidates:
+            if (d / "config.json").exists():
+                return d
+        for d in candidates:
+            try:
+                test = d / "._billaccount_probe"
+                test.write_text("ok")
+                test.unlink()
+                return d
+            except OSError:
+                continue
+
+        return candidates[0] if candidates else Path(os.getcwd())
     else:
         return Path(__file__).parent.parent
 
@@ -47,8 +77,40 @@ class ConfigManager:
                 self.data[key] = value
 
     def save(self):
-        with open(self.config_path, "w", encoding="utf-8") as f:
-            json.dump(self.data, f, ensure_ascii=False, indent=2)
+        try:
+            self.config_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                json.dump(self.data, f, ensure_ascii=False, indent=2)
+            if not self.config_path.exists():
+                raise IOError("Config file not found after write")
+            self._debug_log(f"OK: saved to {self.config_path}")
+        except Exception as e:
+            self._debug_log(f"FAIL: {self.config_path} -> {e}")
+            fallback = Path.home() / ".billaccount" / "config.json"
+            try:
+                fallback.parent.mkdir(parents=True, exist_ok=True)
+                with open(fallback, "w", encoding="utf-8") as f:
+                    json.dump(self.data, f, ensure_ascii=False, indent=2)
+                self.config_path = fallback
+                self._app_dir = fallback.parent
+                self._debug_log(f"FALLBACK: saved to {fallback}")
+            except Exception as e2:
+                self._debug_log(f"FALLBACK FAIL: {e2}")
+
+    def _debug_log(self, msg):
+        try:
+            log_path = self.config_path.parent / "config_debug.log"
+            with open(log_path, "a", encoding="utf-8") as f:
+                import datetime
+                ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                f.write(f"[{ts}] {msg}\n")
+                f.write(f"  frozen={getattr(sys, 'frozen', False)}\n")
+                f.write(f"  sys.executable={sys.executable}\n")
+                f.write(f"  sys.argv[0]={sys.argv[0]}\n")
+                f.write(f"  config_path={self.config_path}\n")
+                f.write(f"  app_dir={self._app_dir}\n\n")
+        except Exception:
+            pass
 
     def get(self, key: str, default=None):
         return self.data.get(key, default)
