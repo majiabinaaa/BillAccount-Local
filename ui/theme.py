@@ -85,16 +85,16 @@ def _base_styles():
     QWidget#main_content {{
         background: transparent;
     }}
-    QStackedWidget {{
+    QWidget#main_content QStackedWidget {{
         background: transparent;
     }}
-    QStackedWidget > QWidget {{
+    QWidget#main_content QStackedWidget > QWidget {{
         background: transparent;
     }}
-    QScrollArea {{
+    QWidget#main_content QScrollArea {{
         background: transparent;
     }}
-    QScrollArea > QWidget > QWidget {{
+    QWidget#main_content QScrollArea > QWidget > QWidget {{
         background: transparent;
     }}
     QLabel {{
@@ -471,6 +471,12 @@ def _misc_styles():
     c = COLORS
     return f"""
     QWidget#page_header {{
+        background: transparent;
+    }}
+    QMessageBox, QDialog, QFileDialog {{
+        background-color: {c['surface']};
+    }}
+    QMessageBox QLabel, QDialog QLabel {{
         background: transparent;
     }}
     """
