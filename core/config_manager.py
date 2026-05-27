@@ -7,8 +7,13 @@ from pathlib import Path
 def _get_app_dir() -> Path:
     """Get the directory where config and data files should be stored."""
     if getattr(sys, "frozen", False):
-        # running as PyInstaller bundle
-        return Path(sys.executable).parent
+        try:
+            import ctypes
+            buf = ctypes.create_unicode_buffer(512)
+            ctypes.windll.kernel32.GetModuleFileNameW(None, buf, 512)
+            return Path(buf.value).parent
+        except Exception:
+            return Path(os.path.dirname(os.path.abspath(sys.argv[0])))
     else:
         return Path(__file__).parent.parent
 
