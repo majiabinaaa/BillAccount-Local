@@ -82,16 +82,18 @@ class _ImageCard(QFrame):
         self._name = QLabel(label)
         self._name.setAlignment(Qt.AlignCenter)
         self._name.setStyleSheet(
-            f"color: {COLORS['text_primary']}; font-size: 11px; "
+            f"color: {COLORS['text_primary']}; font-size: 13px; "
+            f"font-family: {FONT_FAMILY}; "
             "background: transparent; border: none;"
         )
         layout.addWidget(self._name)
 
     def _apply_style(self, active):
-        border = "#007AFF" if active else "#E5E5EA"
+        border = COLORS['primary'] if active else COLORS['border']
+        bg = COLORS['primary_light'] if active else COLORS['surface']
         self.setStyleSheet(
-            f"QFrame {{ background-color: white; border: 2px solid {border}; border-radius: 10px; }}"
-            f"QFrame:hover {{ border-color: #007AFF; }}"
+            f"QFrame {{ background-color: {bg}; border: 2px solid {border}; border-radius: 10px; }}"
+            f"QFrame:hover {{ border-color: {COLORS['primary']}; }}"
         )
 
     def set_active(self, active):
@@ -123,11 +125,35 @@ class BgSelectPage(QWidget):
         layout.addWidget(make_title("背景选择"))
 
         hint = QLabel("选择一张喜欢的图片作为应用背景，不透明度 35%")
-        hint.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 13px;")
+        hint.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 14px; font-family: {FONT_FAMILY};")
         layout.addWidget(hint)
 
         self._current_bg = self.app.config.get("background_path", "")
         self._current_bg_resolved = _resolve_bg_path(self._current_bg)
+
+        # Reset button at top
+        reset_row = QHBoxLayout()
+        reset_row.addStretch()
+        reset_btn = QPushButton("恢复默认背景")
+        reset_btn.setCursor(Qt.PointingHandCursor)
+        reset_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['border_light']};
+                color: {COLORS['text_secondary']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 8px;
+                padding: 8px 20px;
+                font-size: 13px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['border']};
+                color: {COLORS['text_primary']};
+            }}
+        """)
+        reset_btn.clicked.connect(self._on_reset)
+        reset_row.addWidget(reset_btn)
+        layout.addLayout(reset_row)
 
         themes = _scan_themes()
         for theme in themes:
@@ -138,8 +164,8 @@ class BgSelectPage(QWidget):
                 # Character sub-heading
                 char_label = QLabel(f"  {char['name']}")
                 char_label.setStyleSheet(
-                    f"color: {COLORS['text_secondary']}; font-size: 13px; "
-                    f"font-family: {FONT_FAMILY};"
+                    f"color: {COLORS['text_primary']}; font-size: 14px; "
+                    f"font-weight: 600; font-family: {FONT_FAMILY};"
                 )
                 layout.addWidget(char_label)
 
@@ -154,28 +180,6 @@ class BgSelectPage(QWidget):
                     grid.addWidget(card, i // 4, i % 4)
                     self._cards.append((abs_str, rel_str, card))
                 layout.addLayout(grid)
-
-        # Reset button
-        reset_row = QHBoxLayout()
-        reset_row.addStretch()
-        reset_btn = QPushButton("恢复默认背景")
-        reset_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['border_light']};
-                color: {COLORS['text_secondary']};
-                border: none;
-                border-radius: 8px;
-                padding: 8px 20px;
-                font-size: 13px;
-                font-family: {FONT_FAMILY};
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['border']};
-            }}
-        """)
-        reset_btn.clicked.connect(self._on_reset)
-        reset_row.addWidget(reset_btn)
-        layout.addLayout(reset_row)
 
         layout.addStretch()
 

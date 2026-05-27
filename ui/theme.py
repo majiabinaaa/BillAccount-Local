@@ -88,18 +88,8 @@ def _base_styles():
     QWidget#main_content QStackedWidget {{
         background: transparent;
     }}
-    QWidget#main_content QStackedWidget > QWidget {{
-        background: transparent;
-    }}
-    QWidget#main_content QScrollArea {{
-        background: transparent;
-    }}
-    QWidget#main_content QScrollArea > QWidget > QWidget {{
-        background: transparent;
-    }}
     QLabel {{
         color: {c['text_primary']};
-        background: transparent;
         font-family: {FONT_FAMILY};
     }}
     """
@@ -260,9 +250,9 @@ def _button_styles():
     }}
 
     QPushButton[cssClass="period-btn"] {{
-        background-color: transparent;
+        background-color: {c['surface']};
         color: {c['text_secondary']};
-        border: none;
+        border: 1px solid {c['border']};
         border-radius: 8px;
         font-size: 13px;
         font-family: {FONT_FAMILY};
@@ -355,7 +345,7 @@ def _input_styles():
         border-bottom: 2px solid {c['input_border']};
         border-radius: 0;
         padding: 8px 4px;
-        background: transparent;
+        background-color: {c['surface']};
     }}
     QLineEdit[cssClass="underline-input"]:focus,
     QDateEdit[cssClass="underline-input"]:focus,
@@ -406,10 +396,6 @@ def _table_styles():
 
 def _scrollbar_styles():
     return """
-    QScrollArea {
-        border: none;
-        background: transparent;
-    }
     QScrollBar:vertical {
         background: transparent;
         width: 8px;

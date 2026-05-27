@@ -19,6 +19,12 @@ class MainWindow(QWidget):
         self._bg_label.setScaledContents(False)
         self._bg_label.lower()
 
+        # Frosted glass overlay (semi-transparent white between bg and content)
+        self._overlay = QLabel(self)
+        self._overlay.setStyleSheet("background-color: rgba(255, 255, 255, 180);")
+        self._overlay.setScaledContents(True)
+        self._overlay.lower()
+
         self.stack = QStackedWidget()
         self.stack.setStyleSheet("background: transparent;")
         layout.addWidget(self.stack)
@@ -33,20 +39,23 @@ class MainWindow(QWidget):
             self._bg_pixmap = None
             self._bg_label.clear()
             self._bg_label.setStyleSheet("background: transparent;")
+            self._overlay.setVisible(False)
             return
         self._bg_pixmap = QPixmap(path)
+        self._overlay.setVisible(True)
         self._apply_background()
 
     def _apply_background(self):
         if self._bg_pixmap is None or self._bg_pixmap.isNull():
             self._bg_label.clear()
             self._bg_label.setStyleSheet("background: transparent;")
+            self._overlay.setVisible(False)
             return
         # Scale to fill window, maintain aspect ratio
         scaled = self._bg_pixmap.scaled(
             self.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation
         )
-        # Apply 75% opacity
+        # Apply 35% opacity
         result = QImage(scaled.size(), QImage.Format_ARGB32)
         result.fill(Qt.transparent)
         painter = QPainter(result)
@@ -56,6 +65,7 @@ class MainWindow(QWidget):
         self._bg_label.setPixmap(QPixmap.fromImage(result))
         self._bg_label.resize(self.size())
         self._bg_label.setAlignment(Qt.AlignCenter)
+        self._overlay.resize(self.size())
 
     def resizeEvent(self, event):
         super().resizeEvent(event)

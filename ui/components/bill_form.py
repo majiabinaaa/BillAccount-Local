@@ -154,7 +154,7 @@ class BillForm(QWidget):
             else:
                 btn.setStyleSheet(f"""
                     QPushButton {{
-                        background-color: transparent;
+                        background-color: {COLORS['surface']};
                         color: {COLORS['text_secondary']};
                         border: 2px solid {COLORS['border']};
                         border-radius: 10px;
