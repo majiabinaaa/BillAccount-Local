@@ -13,6 +13,25 @@ from ui.utils import make_title, make_heading
 _ASSETS = Path(__file__).resolve().parent.parent.parent / "assets" / "background"
 
 
+def _relative_bg_path(abs_path: str) -> str:
+    """Convert absolute background path to relative (relative to _ASSETS)."""
+    try:
+        return str(Path(abs_path).relative_to(_ASSETS))
+    except ValueError:
+        return abs_path
+
+
+def _resolve_bg_path(rel_or_abs: str) -> str:
+    """Resolve a relative background path to absolute. Returns abs path if already absolute."""
+    p = Path(rel_or_abs)
+    if p.is_absolute() and p.exists():
+        return str(p)
+    candidate = _ASSETS / rel_or_abs
+    if candidate.exists():
+        return str(candidate)
+    return ""
+
+
 def _scan_themes():
     """Scan background assets and return structured theme data."""
     themes = []
@@ -108,6 +127,7 @@ class BgSelectPage(QWidget):
         layout.addWidget(hint)
 
         self._current_bg = self.app.config.get("background_path", "")
+        self._current_bg_resolved = _resolve_bg_path(self._current_bg)
 
         themes = _scan_themes()
         for theme in themes:
@@ -126,11 +146,13 @@ class BgSelectPage(QWidget):
                 grid = QGridLayout()
                 grid.setSpacing(10)
                 for i, img_path in enumerate(char["images"]):
-                    path_str = str(img_path)
-                    card = _ImageCard(path_str, img_path.stem, is_active=(path_str == self._current_bg))
+                    abs_str = str(img_path)
+                    rel_str = _relative_bg_path(abs_str)
+                    card = _ImageCard(abs_str, img_path.stem,
+                                     is_active=(abs_str == self._current_bg_resolved))
                     card.clicked.connect(self._on_select)
                     grid.addWidget(card, i // 4, i % 4)
-                    self._cards.append((path_str, card))
+                    self._cards.append((abs_str, rel_str, card))
                 layout.addLayout(grid)
 
         # Reset button
@@ -162,18 +184,21 @@ class BgSelectPage(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
 
-    def _on_select(self, path: str):
-        self.app.config.set("background_path", path)
-        self._current_bg = path
+    def _on_select(self, abs_path: str):
+        rel = _relative_bg_path(abs_path)
+        self.app.config.set("background_path", rel)
+        self._current_bg = rel
+        self._current_bg_resolved = abs_path
         self._refresh_cards()
-        self.app.main_window.set_background(path)
+        self.app.main_window.set_background(abs_path)
 
     def _on_reset(self):
         self.app.config.set("background_path", "")
         self._current_bg = ""
+        self._current_bg_resolved = ""
         self._refresh_cards()
         self.app.main_window.set_background("")
 
     def _refresh_cards(self):
-        for path_str, card in self._cards:
-            card.set_active(path_str == self._current_bg)
+        for abs_str, rel_str, card in self._cards:
+            card.set_active(abs_str == self._current_bg_resolved)

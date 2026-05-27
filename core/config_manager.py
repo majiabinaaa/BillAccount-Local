@@ -70,8 +70,10 @@ class ConfigManager:
             try:
                 with open(self.config_path, "r", encoding="utf-8") as f:
                     self.data = json.load(f)
+                self._debug_log(f"LOADED from {self.config_path}: bg={self.data.get('background_path', '(none)')}")
             except (json.JSONDecodeError, IOError):
                 self.data = {}
+                self._debug_log(f"FAILED to load {self.config_path}")
         for key, value in DEFAULT_CONFIG.items():
             if key not in self.data:
                 self.data[key] = value

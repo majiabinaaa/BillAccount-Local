@@ -86,7 +86,10 @@ class App(QMainWindow):
         # Restore saved background
         saved_bg = self.config.get("background_path", "")
         if saved_bg:
-            self.main_window.set_background(saved_bg)
+            from ui.pages.bg_select import _resolve_bg_path
+            resolved = _resolve_bg_path(saved_bg)
+            if resolved:
+                self.main_window.set_background(resolved)
 
     def _register_pages(self):
         from ui.pages.dashboard import DashboardPage
