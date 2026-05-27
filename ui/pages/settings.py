@@ -61,7 +61,20 @@ class SettingsPage(QWidget):
         browse_btn = QPushButton("浏览")
         browse_btn.setFixedSize(70, 36)
         browse_btn.setCursor(Qt.PointingHandCursor)
-        set_css_class(browse_btn, "secondary-btn")
+        browse_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['primary_light']};
+                color: {COLORS['primary']};
+                border: none;
+                border-radius: 10px;
+                font-size: 13px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['primary']};
+                color: {COLORS['text_white']};
+            }}
+        """)
         browse_btn.clicked.connect(self._browse_path)
         path_row.addWidget(browse_btn)
 
@@ -70,7 +83,20 @@ class SettingsPage(QWidget):
         save_path_btn = QPushButton("应用新路径")
         save_path_btn.setFixedSize(130, 36)
         save_path_btn.setCursor(Qt.PointingHandCursor)
-        set_css_class(save_path_btn, "primary-btn")
+        save_path_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['primary']};
+                color: {COLORS['text_white']};
+                border: none;
+                border-radius: 10px;
+                font-weight: 600;
+                font-size: 14px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['primary_hover']};
+            }}
+        """)
         save_path_btn.clicked.connect(self._save_path)
         p_layout.addWidget(save_path_btn)
 
@@ -93,7 +119,21 @@ class SettingsPage(QWidget):
             btn = QPushButton(text)
             btn.setFixedHeight(36)
             btn.setCursor(Qt.PointingHandCursor)
-            set_css_class(btn, "secondary-btn")
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {COLORS['primary_light']};
+                    color: {COLORS['primary']};
+                    border: none;
+                    border-radius: 10px;
+                    padding: 8px 16px;
+                    font-size: 13px;
+                    font-family: {FONT_FAMILY};
+                }}
+                QPushButton:hover {{
+                    background-color: {COLORS['primary']};
+                    color: {COLORS['text_white']};
+                }}
+            """)
             btn.clicked.connect(handler)
             btn_row.addWidget(btn)
 
@@ -114,7 +154,20 @@ class SettingsPage(QWidget):
         clear_btn = QPushButton("清空所有数据")
         clear_btn.setFixedSize(130, 36)
         clear_btn.setCursor(Qt.PointingHandCursor)
-        set_css_class(clear_btn, "danger-btn")
+        clear_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['danger']};
+                color: {COLORS['text_white']};
+                border: none;
+                border-radius: 10px;
+                font-weight: 600;
+                font-size: 14px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background-color: #E0302A;
+            }}
+        """)
         clear_btn.clicked.connect(self._clear_all)
         d_layout.addWidget(clear_btn)
 

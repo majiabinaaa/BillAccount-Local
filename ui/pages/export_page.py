@@ -132,20 +132,58 @@ class ExportPage(QWidget):
         prev_btn = QPushButton("◀")
         prev_btn.setFixedSize(32, 32)
         prev_btn.setCursor(Qt.PointingHandCursor)
-        set_css_class(prev_btn, "nav-arrow")
+        prev_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['border_light']};
+                border: none;
+                border-radius: 8px;
+                font-size: 12px;
+                padding: 6px 12px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['border']};
+            }}
+        """)
         prev_btn.clicked.connect(lambda: self._nav_week(-1))
         weekly_row.addWidget(prev_btn)
 
         next_btn = QPushButton("▶")
         next_btn.setFixedSize(32, 32)
         next_btn.setCursor(Qt.PointingHandCursor)
-        set_css_class(next_btn, "nav-arrow")
+        next_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['border_light']};
+                border: none;
+                border-radius: 8px;
+                font-size: 12px;
+                padding: 6px 12px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['border']};
+            }}
+        """)
         next_btn.clicked.connect(lambda: self._nav_week(1))
         weekly_row.addWidget(next_btn)
 
         today_btn = QPushButton("今天")
         today_btn.setCursor(Qt.PointingHandCursor)
-        set_css_class(today_btn, "ghost-btn")
+        today_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['border_light']};
+                color: {COLORS['text_secondary']};
+                border: none;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 13px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['border']};
+                color: {COLORS['text_primary']};
+            }}
+        """)
         today_btn.clicked.connect(lambda: self._nav_week(0, absolute=True))
         weekly_row.addWidget(today_btn)
 

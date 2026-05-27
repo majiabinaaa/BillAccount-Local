@@ -337,6 +337,24 @@ def _input_styles():
         border: none;
         padding-right: 8px;
     }}
+    QComboBox QAbstractItemView {{
+        background-color: {c['surface']};
+        border: 1px solid {c['border']};
+        border-radius: 8px;
+        padding: 4px;
+        selection-background-color: {c['primary_light']};
+        selection-color: {c['text_primary']};
+        outline: none;
+    }}
+    QComboBox QAbstractItemView::item {{
+        padding: 8px 12px;
+        min-height: 28px;
+        color: {c['text_primary']};
+        background: transparent;
+    }}
+    QComboBox QAbstractItemView::item:hover {{
+        background-color: {c['hover']};
+    }}
 
     QLineEdit[cssClass="underline-input"],
     QDateEdit[cssClass="underline-input"],

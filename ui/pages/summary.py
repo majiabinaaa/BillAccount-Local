@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PySide6.QtCore import Qt
 
 from datetime import date, timedelta
-from ui.theme import COLORS, set_css_class
+from ui.theme import COLORS, set_css_class, FONT_FAMILY
 from ui.utils import make_label, make_title, clear_layout
 from ui.components.stat_card import StatCard
 from ui.components.card import Card
@@ -42,7 +42,24 @@ class SummaryPage(QWidget):
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setFixedSize(48, 36)
-            set_css_class(btn, "period-btn")
+            btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {COLORS['surface']};
+                    color: {COLORS['text_secondary']};
+                    border: 1px solid {COLORS['border']};
+                    border-radius: 8px;
+                    font-size: 13px;
+                    font-family: {FONT_FAMILY};
+                }}
+                QPushButton:hover {{
+                    border-color: {COLORS['primary']};
+                    color: {COLORS['primary']};
+                }}
+                QPushButton:checked {{
+                    background-color: {COLORS['primary']};
+                    color: white;
+                }}
+            """)
             btn.clicked.connect(lambda checked, p=period: self._on_period_change(p))
             period_frame.addWidget(btn)
             self.period_buttons[period] = btn

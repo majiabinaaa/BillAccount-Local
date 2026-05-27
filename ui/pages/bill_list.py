@@ -13,108 +13,6 @@ from ui.components.empty_state import EmptyState
 from core.models import Bill
 
 
-class DatePicker(QWidget):
-    """Date picker with a text display and a calendar button."""
-    def __init__(self, initial_date=None, parent=None):
-        super().__init__(parent)
-        self._date = initial_date or date.today()
-        self._popup = None
-
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
-
-        self._display = QLineEdit()
-        self._display.setReadOnly(True)
-        self._display.setFixedHeight(36)
-        self._display.setMinimumWidth(110)
-        self._display.setText(self._date.isoformat())
-        self._display.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {COLORS['surface']};
-                border: 1px solid {COLORS['input_border']};
-                border-radius: 8px;
-                padding: 8px 10px;
-                font-size: 13px;
-                color: {COLORS['text_primary']};
-                font-family: {FONT_FAMILY};
-            }}
-        """)
-        layout.addWidget(self._display)
-
-        self._btn = QPushButton("📅")
-        self._btn.setFixedSize(36, 36)
-        self._btn.setCursor(Qt.PointingHandCursor)
-        self._btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {COLORS['border_light']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 8px;
-                font-size: 16px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['border']};
-            }}
-        """)
-        self._btn.clicked.connect(self._show_calendar)
-        layout.addWidget(self._btn)
-
-    def date(self):
-        return self._date
-
-    def setDate(self, d):
-        self._date = d
-        self._display.setText(d.isoformat())
-
-    def _show_calendar(self):
-        if self._popup and self._popup.isVisible():
-            self._popup.close()
-            return
-
-        self._popup = QWidget(self, Qt.Popup)
-        self._popup.setStyleSheet(f"""
-            QWidget {{
-                background: {COLORS['surface']};
-                border: 1px solid {COLORS['border']};
-                border-radius: 10px;
-            }}
-        """)
-        cal_layout = QVBoxLayout(self._popup)
-        cal_layout.setContentsMargins(4, 4, 4, 4)
-
-        cal = QCalendarWidget()
-        cal.setSelectedDate(QDate(self._date.year, self._date.month, self._date.day))
-        cal.setGridVisible(True)
-        cal.setStyleSheet(f"""
-            QCalendarWidget {{
-                background: transparent;
-                border: none;
-            }}
-            QCalendarWidget QToolButton {{
-                color: {COLORS['text_primary']};
-                background: transparent;
-                font-size: 13px;
-            }}
-            QCalendarWidget QAbstractItemView {{
-                selection-background-color: {COLORS['primary']};
-                selection-color: white;
-            }}
-        """)
-        cal.clicked.connect(lambda d: self._on_date_selected(d))
-        cal_layout.addWidget(cal)
-
-        # Position below the button
-        btn_pos = self._btn.mapToGlobal(self._btn.rect().bottomLeft())
-        self._popup.move(btn_pos)
-        self._popup.show()
-
-    def _on_date_selected(self, qdate):
-        self._date = qdate.toPython()
-        self._display.setText(self._date.isoformat())
-        if self._popup:
-            self._popup.close()
-
-
 class BillListPage(QWidget):
     def __init__(self, app, parent=None):
         super().__init__(parent)
@@ -139,12 +37,22 @@ class BillListPage(QWidget):
         filter_layout = QHBoxLayout()
         filter_layout.setSpacing(10)
 
-        self.start_date = DatePicker(date(2020, 1, 1))
+        self.start_date = QDateEdit()
+        self.start_date.setCalendarPopup(True)
+        self.start_date.setDate(QDate(2020, 1, 1))
+        self.start_date.setDisplayFormat("yyyy-MM-dd")
+        self.start_date.setFixedHeight(36)
+        self.start_date.setMinimumWidth(130)
         filter_layout.addWidget(self.start_date)
 
         filter_layout.addWidget(make_label("~", 13, color=COLORS['text_tertiary']))
 
-        self.end_date = DatePicker(date.today())
+        self.end_date = QDateEdit()
+        self.end_date.setCalendarPopup(True)
+        self.end_date.setDate(QDate.currentDate())
+        self.end_date.setDisplayFormat("yyyy-MM-dd")
+        self.end_date.setFixedHeight(36)
+        self.end_date.setMinimumWidth(130)
         filter_layout.addWidget(self.end_date)
 
         self.type_combo = QComboBox()
@@ -163,7 +71,20 @@ class BillListPage(QWidget):
         search_btn.setCursor(Qt.PointingHandCursor)
         search_btn.setFixedHeight(36)
         search_btn.setMinimumWidth(64)
-        set_css_class(search_btn, "primary-btn")
+        search_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['primary']};
+                color: {COLORS['text_white']};
+                border: none;
+                border-radius: 10px;
+                font-weight: 600;
+                font-size: 14px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['primary_hover']};
+            }}
+        """)
         search_btn.clicked.connect(self._search)
         filter_layout.addWidget(search_btn)
 
@@ -188,7 +109,25 @@ class BillListPage(QWidget):
 
         self.prev_btn = QPushButton("上一页")
         self.prev_btn.setCursor(Qt.PointingHandCursor)
-        set_css_class(self.prev_btn, "ghost-btn")
+        self.prev_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['border_light']};
+                color: {COLORS['text_secondary']};
+                border: none;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 13px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['border']};
+                color: {COLORS['text_primary']};
+            }}
+            QPushButton:disabled {{
+                color: {COLORS['text_hint']};
+                background-color: {COLORS['border_light']};
+            }}
+        """)
         self.prev_btn.clicked.connect(self._prev_page)
         self.prev_btn.setEnabled(False)
         nav_layout.addWidget(self.prev_btn)
@@ -198,7 +137,25 @@ class BillListPage(QWidget):
 
         self.next_btn = QPushButton("下一页")
         self.next_btn.setCursor(Qt.PointingHandCursor)
-        set_css_class(self.next_btn, "ghost-btn")
+        self.next_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['border_light']};
+                color: {COLORS['text_secondary']};
+                border: none;
+                border-radius: 8px;
+                padding: 8px 16px;
+                font-size: 13px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['border']};
+                color: {COLORS['text_primary']};
+            }}
+            QPushButton:disabled {{
+                color: {COLORS['text_hint']};
+                background-color: {COLORS['border_light']};
+            }}
+        """)
         self.next_btn.clicked.connect(self._next_page)
         self.next_btn.setEnabled(False)
         nav_layout.addWidget(self.next_btn)
@@ -224,8 +181,8 @@ class BillListPage(QWidget):
 
     def _load_bills(self):
         self.table.setRowCount(0)
-        start = self.start_date.date()
-        end = self.end_date.date()
+        start = self.start_date.date().toPython()
+        end = self.end_date.date().toPython()
 
         bill_type = None
         type_display = self.type_combo.currentText()
@@ -287,15 +244,37 @@ class BillListPage(QWidget):
 
         edit_btn = QPushButton("编辑")
         edit_btn.setCursor(Qt.PointingHandCursor)
-        set_css_class(edit_btn, "link-btn")
-        edit_btn.setStyleSheet(f"color: {COLORS['primary']};")
+        edit_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                color: {COLORS['primary']};
+                font-size: 12px;
+                padding: 4px 8px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                color: {COLORS['primary_hover']};
+            }}
+        """)
         edit_btn.clicked.connect(lambda checked, b=bill: self._show_edit(b))
         action_layout.addWidget(edit_btn)
 
         del_btn = QPushButton("删除")
         del_btn.setCursor(Qt.PointingHandCursor)
-        set_css_class(del_btn, "link-btn")
-        del_btn.setStyleSheet(f"color: {COLORS['danger']};")
+        del_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: none;
+                color: {COLORS['danger']};
+                font-size: 12px;
+                padding: 4px 8px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                color: #E0302A;
+            }}
+        """)
         del_btn.clicked.connect(lambda checked, b=bill: self._delete_bill(b))
         action_layout.addWidget(del_btn)
 

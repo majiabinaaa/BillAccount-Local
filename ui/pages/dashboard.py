@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PySide6.QtCore import Qt
 
 from datetime import date
-from ui.theme import COLORS, set_css_class
+from ui.theme import COLORS, set_css_class, FONT_FAMILY
 from ui.utils import make_label, make_title, make_subtitle, clear_layout
 from ui.components.card import Card
 from ui.components.stat_card import StatCard
@@ -48,7 +48,19 @@ class DashboardPage(QWidget):
         self.prev_btn = QPushButton("◀ 上周")
         self.prev_btn.setFixedSize(80, 32)
         self.prev_btn.setCursor(Qt.PointingHandCursor)
-        set_css_class(self.prev_btn, "nav-arrow")
+        self.prev_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['border_light']};
+                border: none;
+                border-radius: 8px;
+                font-size: 12px;
+                padding: 6px 12px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['border']};
+            }}
+        """)
         self.prev_btn.clicked.connect(lambda: self._nav_week(-1))
         nav_row.addWidget(self.prev_btn)
 
@@ -58,7 +70,19 @@ class DashboardPage(QWidget):
         self.next_btn = QPushButton("下周 ▶")
         self.next_btn.setFixedSize(80, 32)
         self.next_btn.setCursor(Qt.PointingHandCursor)
-        set_css_class(self.next_btn, "nav-arrow")
+        self.next_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['border_light']};
+                border: none;
+                border-radius: 8px;
+                font-size: 12px;
+                padding: 6px 12px;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['border']};
+            }}
+        """)
         self.next_btn.clicked.connect(lambda: self._nav_week(1))
         nav_row.addWidget(self.next_btn)
         report_layout.addLayout(nav_row)

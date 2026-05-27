@@ -106,11 +106,18 @@ class BillForm(QWidget):
         self.submit_btn = QPushButton(btn_text)
         self.submit_btn.setFixedHeight(48)
         self.submit_btn.setCursor(Qt.PointingHandCursor)
-        set_css_class(self.submit_btn, "primary-btn")
         self.submit_btn.setStyleSheet(f"""
             QPushButton {{
+                background-color: {COLORS['primary']};
+                color: {COLORS['text_white']};
+                border: none;
                 border-radius: 24px;
                 font-size: 16px;
+                font-weight: 600;
+                font-family: {FONT_FAMILY};
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['primary_hover']};
             }}
         """)
         self.submit_btn.clicked.connect(self._submit)
