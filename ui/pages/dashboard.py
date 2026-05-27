@@ -1,263 +1,223 @@
-import customtkinter as ctk
-from datetime import date
+"""Dashboard page - Apple-style card grid layout."""
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                               QPushButton, QFrame, QScrollArea)
+from PySide6.QtCore import Qt
 
+from datetime import date
+from ui.theme import COLORS, set_css_class
+from ui.utils import make_label, make_title, make_subtitle, clear_layout
+from ui.components.card import Card
+from ui.components.stat_card import StatCard
+from ui.components.badge import Badge
+from ui.components.progress_bar import ProgressBar
+from ui.components.empty_state import EmptyState
 from utils.date_utils import get_month_range
 from core.analytics import calculate_health_score
-from core.report_generator import generate_weekly_report
 
 
-class DashboardPage(ctk.CTkFrame):
-    def __init__(self, master, app, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
+class DashboardPage(QWidget):
+    def __init__(self, app, parent=None):
+        super().__init__(parent)
         self.app = app
         self.db = app.db
-        self._week_offset = 0  # 0 = this week, -1 = last week, etc.
+        self._week_offset = 0
+        self._setup_ui()
 
-        self.grid_rowconfigure(5, weight=1)
-        self.grid_columnconfigure(0, weight=1)
+    def _setup_ui(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
 
-        # ---- Header ----
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=25, pady=(25, 10))
-        ctk.CTkLabel(header, text="仪表盘",
-                     font=ctk.CTkFont(size=26, weight="bold")).pack(side="left")
-        today_str = date.today().isoformat()
-        ctk.CTkLabel(header, text=today_str,
-                     font=ctk.CTkFont(size=14),
-                     text_color=("gray40", "gray60")).pack(side="right")
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(36, 24, 36, 24)
+        layout.setSpacing(24)
 
-        # ---- Weekly Report Card ----
-        self.report_frame = ctk.CTkFrame(self, corner_radius=12)
-        self.report_frame.grid(row=1, column=0, sticky="ew", padx=25, pady=(0, 8))
-        self._build_report_card()
+        # Header
+        header = QHBoxLayout()
+        header.addWidget(make_title("仪表盘"))
+        header.addStretch()
+        header.addWidget(make_label(date.today().isoformat(), 14, color=COLORS['text_tertiary']))
+        layout.addLayout(header)
 
-        # ---- Health score card ----
-        self.health_frame = ctk.CTkFrame(self, corner_radius=14)
-        self.health_frame.grid(row=2, column=0, sticky="ew", padx=25, pady=(0, 8))
-        self._build_health_card()
+        # Weekly Report Card
+        report_card = Card(padding=(24, 24, 24, 24), spacing=12)
+        report_layout = report_card.content_layout()
 
-        # ---- Today stats ----
-        self.today_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.today_frame.grid(row=3, column=0, sticky="ew", padx=25, pady=(0, 5))
-        for i in range(3):
-            self.today_frame.grid_columnconfigure(i, weight=1)
-        self.today_income_card = self._make_stat_card(self.today_frame, "今日收入", "#4CAF50", 0, 0)
-        self.today_expense_card = self._make_stat_card(self.today_frame, "今日支出", "#F44336", 0, 1)
-        self.today_balance_card = self._make_stat_card(self.today_frame, "今日结余", "#2196F3", 0, 2)
+        nav_row = QHBoxLayout()
+        self.prev_btn = QPushButton("◀ 上周")
+        self.prev_btn.setFixedSize(80, 32)
+        self.prev_btn.setCursor(Qt.PointingHandCursor)
+        set_css_class(self.prev_btn, "nav-arrow")
+        self.prev_btn.clicked.connect(lambda: self._nav_week(-1))
+        nav_row.addWidget(self.prev_btn)
 
-        # ---- Month stats ----
-        self.month_frame = ctk.CTkFrame(self, fg_color="transparent")
-        self.month_frame.grid(row=4, column=0, sticky="ew", padx=25, pady=(0, 5))
-        for i in range(3):
-            self.month_frame.grid_columnconfigure(i, weight=1)
-        self.month_income_card = self._make_stat_card(self.month_frame, "本月收入", "#81C784", 0, 0)
-        self.month_expense_card = self._make_stat_card(self.month_frame, "本月支出", "#EF9A9A", 0, 1)
-        self.month_balance_card = self._make_stat_card(self.month_frame, "本月结余", "#64B5F6", 0, 2)
+        self.report_title = make_label("本周财务周报", 16, True)
+        nav_row.addWidget(self.report_title)
 
-        # ---- Recent bills ----
-        recent_frame = ctk.CTkFrame(self)
-        recent_frame.grid(row=5, column=0, sticky="nsew", padx=25, pady=(0, 25))
-        recent_frame.grid_rowconfigure(1, weight=1)
-        recent_frame.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(recent_frame, text="最近账单",
-                     font=ctk.CTkFont(size=17, weight="bold")).grid(
-            row=0, column=0, sticky="w", padx=18, pady=(15, 8))
-        self.recent_list = ctk.CTkScrollableFrame(recent_frame, fg_color="transparent")
-        self.recent_list.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.next_btn = QPushButton("下周 ▶")
+        self.next_btn.setFixedSize(80, 32)
+        self.next_btn.setCursor(Qt.PointingHandCursor)
+        set_css_class(self.next_btn, "nav-arrow")
+        self.next_btn.clicked.connect(lambda: self._nav_week(1))
+        nav_row.addWidget(self.next_btn)
+        report_layout.addLayout(nav_row)
 
-    # ==================== Weekly Report ====================
-    def _build_report_card(self):
-        # top bar: title + nav arrows
-        nav_row = ctk.CTkFrame(self.report_frame, fg_color="transparent")
-        nav_row.pack(fill="x", padx=16, pady=(14, 0))
+        self.report_text = make_label("", 13, color=COLORS['text_secondary'])
+        self.report_text.setWordWrap(True)
+        report_layout.addWidget(self.report_text)
 
-        self.prev_btn = ctk.CTkButton(
-            nav_row, text="◀ 上周", width=70, height=28,
-            font=ctk.CTkFont(size=11),
-            command=lambda: self._nav_week(-1),
-        )
-        self.prev_btn.pack(side="left")
+        self.badges_layout = QHBoxLayout()
+        self.badges_layout.setSpacing(8)
+        report_layout.addLayout(self.badges_layout)
 
-        self.report_title = ctk.CTkLabel(
-            nav_row, text="📅 本周财务周报",
-            font=ctk.CTkFont(size=16, weight="bold"),
-        )
-        self.report_title.pack(side="left", padx=12)
+        layout.addWidget(report_card)
 
-        self.next_btn = ctk.CTkButton(
-            nav_row, text="下周 ▶", width=70, height=28,
-            font=ctk.CTkFont(size=11),
-            command=lambda: self._nav_week(1),
-        )
-        self.next_btn.pack(side="right")
+        # Health Score Card
+        health_card = Card(padding=(24, 24, 24, 24), spacing=12)
+        health_layout = health_card.content_layout()
 
-        # sentiment badge
-        self.sentiment_badge = ctk.CTkLabel(
-            nav_row, text="",
-            font=ctk.CTkFont(size=11),
-        )
-        self.sentiment_badge.pack(side="right", padx=(0, 8))
+        score_row = QHBoxLayout()
+        score_row.setAlignment(Qt.AlignCenter)
+        score_row.setSpacing(4)
+        self.score_label = make_label("--", 48, True, COLORS['success'])
+        self.score_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        score_row.addWidget(self.score_label)
+        score_unit = make_label("分", 16, color=COLORS['text_tertiary'])
+        score_unit.setAlignment(Qt.AlignLeft | Qt.AlignBottom)
+        score_row.addWidget(score_unit)
+        score_row.addStretch()
+        health_layout.addLayout(score_row)
 
-        # report text body
-        self.report_text = ctk.CTkLabel(
-            self.report_frame, text="",
-            font=ctk.CTkFont(size=13),
-            justify="left",
-            anchor="w",
-            wraplength=900,
-        )
-        self.report_text.pack(fill="x", padx=20, pady=(8, 16), anchor="w")
+        detail_col = QVBoxLayout()
+        detail_col.setSpacing(8)
+        self.rating_label = make_label("财务健康", 16, True)
+        detail_col.addWidget(self.rating_label)
 
-        # trend badges row
-        self.badges_frame = ctk.CTkFrame(self.report_frame, fg_color="transparent")
-        self.badges_frame.pack(fill="x", padx=18, pady=(0, 12))
+        self.bar_frame = QVBoxLayout()
+        self.bar_frame.setSpacing(6)
+        detail_col.addLayout(self.bar_frame)
+        health_layout.addLayout(detail_col, 1)
 
-    def _nav_week(self, delta: int):
+        layout.addWidget(health_card)
+
+        # Stats - Today
+        stats_layout = QHBoxLayout()
+        stats_layout.setSpacing(16)
+        self.today_income = StatCard("今日收入", COLORS['success'])
+        self.today_expense = StatCard("今日支出", COLORS['danger'])
+        self.today_balance = StatCard("今日结余", COLORS['info'])
+        stats_layout.addWidget(self.today_income)
+        stats_layout.addWidget(self.today_expense)
+        stats_layout.addWidget(self.today_balance)
+        layout.addLayout(stats_layout)
+
+        # Stats - Month
+        stats_layout2 = QHBoxLayout()
+        stats_layout2.setSpacing(16)
+        self.month_income = StatCard("本月收入", COLORS['success'])
+        self.month_expense = StatCard("本月支出", COLORS['danger'])
+        self.month_balance = StatCard("本月结余", COLORS['info'])
+        stats_layout2.addWidget(self.month_income)
+        stats_layout2.addWidget(self.month_expense)
+        stats_layout2.addWidget(self.month_balance)
+        layout.addLayout(stats_layout2)
+
+        # Recent Bills Card
+        recent_card = Card(padding=(24, 24, 24, 24), spacing=12)
+        recent_layout = recent_card.content_layout()
+
+        recent_layout.addWidget(make_label("最近账单", 17, True))
+        self.recent_list = QVBoxLayout()
+        self.recent_list.setSpacing(8)
+        recent_layout.addLayout(self.recent_list)
+
+        layout.addWidget(recent_card, 1)
+        layout.addStretch()
+
+        scroll.setWidget(content)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+
+    def _nav_week(self, delta):
         self._week_offset += delta
-        # clamp: can't go past current week (no future data)
         if self._week_offset > 0:
             self._week_offset = 0
             return
         self._load_report()
 
     def _load_report(self):
+        from core.report_generator import generate_weekly_report
         report = generate_weekly_report(self.db, self._week_offset)
 
-        # nav state
-        self.prev_btn.configure(state="normal")
-        if self._week_offset == 0:
-            self.next_btn.configure(state="disabled")
-        else:
-            self.next_btn.configure(state="normal")
+        self.prev_btn.setEnabled(True)
+        self.next_btn.setEnabled(self._week_offset < 0)
 
         if report is None:
-            self.report_title.configure(text="📅 本周财务周报（暂无数据）")
-            self.report_text.configure(
-                text="这周还没有记账记录。开始记一笔吧！",
-                text_color=("gray45", "gray55"),
-            )
-            self.sentiment_badge.configure(text="")
-            for w in self.badges_frame.winfo_children():
-                w.destroy()
+            self.report_title.setText("本周财务周报（暂无数据）")
+            self.report_text.setText("这周还没有记账记录。开始记一笔吧！")
+            self._clear_badges()
             return
 
         is_current = (self._week_offset == 0)
-        title = f"📅 {'本周' if is_current else ''}财务周报（{report['week_label']}）"
-        self.report_title.configure(text=title)
-        self.report_text.configure(text=report["report_text"],
-                                   text_color=("gray15", "gray85"))
+        title = f"{'本周' if is_current else ''}财务周报（{report['week_label']}）"
+        self.report_title.setText(title)
+        self.report_text.setText(report["report_text"])
 
-        # sentiment
-        sent_map = {
-            "positive": ("😊 表现不错", "#4CAF50"),
-            "neutral": ("😐 表现平平", "#FF9800"),
-            "warning": ("⚠️ 需要关注", "#F44336"),
-        }
-        s_text, s_color = sent_map.get(report["sentiment"], ("", ""))
-        self.sentiment_badge.configure(text=s_text, text_color=s_color)
-
-        # badges
-        for w in self.badges_frame.winfo_children():
-            w.destroy()
+        self._clear_badges()
         if report["record_days"] == report["checked_days"]:
-            self._add_badge("🏆 全勤记录", "#4CAF50")
+            self.badges_layout.addWidget(Badge("全勤记录", COLORS['success']))
         if report["savings_rate"] > 40:
-            self._add_badge("💎 高储蓄率", "#2196F3")
+            self.badges_layout.addWidget(Badge("高储蓄率", COLORS['info']))
         if report["balance"] < 0 and report["total_expense"] > 0:
-            self._add_badge("⚠️ 入不敷出", "#F44336")
-        for t in report.get("trends", []):
-            if t["direction"] == "down":
-                self._add_badge(f"📉 {t['category']} ↓{t['change_pct']}%", "#4CAF50")
-            else:
-                self._add_badge(f"📈 {t['category']} ↑{t['change_pct']}%", "#FF9800")
+            self.badges_layout.addWidget(Badge("入不敷出", COLORS['danger']))
 
-    def _add_badge(self, text, color):
-        badge = ctk.CTkFrame(
-            self.badges_frame, fg_color=color,
-            corner_radius=10,
-        )
-        badge.pack(side="left", padx=(0, 6))
-        ctk.CTkLabel(badge, text=text,
-                     font=ctk.CTkFont(size=10, weight="bold"),
-                     text_color="white").pack(padx=8, pady=2)
+    def _clear_badges(self):
+        clear_layout(self.badges_layout)
 
-    # ==================== Health Score ====================
-    def _build_health_card(self):
-        inner = ctk.CTkFrame(self.health_frame, fg_color="transparent")
-        inner.pack(fill="x", padx=20, pady=(14, 16))
-
-        left = ctk.CTkFrame(inner, fg_color="transparent")
-        left.pack(side="left", padx=(0, 20))
-        self.score_label = ctk.CTkLabel(
-            left, text="--", font=ctk.CTkFont(size=52, weight="bold"),
-            text_color="#4CAF50",
-        )
-        self.score_label.pack(side="left")
-        ctk.CTkLabel(left, text="分", font=ctk.CTkFont(size=16),
-                     text_color=("gray45", "gray55")).pack(side="left", padx=(4, 0))
-
-        right = ctk.CTkFrame(inner, fg_color="transparent")
-        right.pack(side="left", fill="x", expand=True, padx=(10, 0))
-        self.rating_label = ctk.CTkLabel(
-            right, text="财务健康", font=ctk.CTkFont(size=16, weight="bold"),
-        )
-        self.rating_label.pack(anchor="w", pady=(0, 8))
-        self.bar_frame = ctk.CTkFrame(right, fg_color="transparent")
-        self.bar_frame.pack(fill="x")
-
-    def _update_health_card(self, health: dict):
+    def _update_health_card(self, health):
         score = health["score"]
         color = health["color"]
-        self.score_label.configure(text=str(score), text_color=color)
-        self.rating_label.configure(
-            text=f"财务健康 · {health['label']}", text_color=color)
+        self.score_label.setText(str(score))
+        self.score_label.setStyleSheet(f"color: {color}; font-size: 48px; font-weight: bold;")
+        self.rating_label.setText(f"财务健康 · {health['label']}")
+        self.rating_label.setStyleSheet(f"color: {color}; font-weight: bold;")
 
-        for child in self.bar_frame.winfo_children():
-            child.destroy()
+        clear_layout(self.bar_frame)
 
         bd = health["breakdown"]
-        dim_colors = {
-            "savings": "#4CAF50", "coverage": "#2196F3",
-            "consistency": "#FF9800", "diversity": "#7E57C2",
-        }
+        dim_colors = {"savings": COLORS['success'], "coverage": COLORS['info'],
+                      "consistency": COLORS['warning'], "diversity": "#AF52DE"}
         for key in ["savings", "coverage", "consistency", "diversity"]:
             item = bd[key]
-            dim_row = ctk.CTkFrame(self.bar_frame, fg_color="transparent")
-            dim_row.pack(fill="x", pady=2)
-            ctk.CTkLabel(dim_row, text=item["label"], font=ctk.CTkFont(size=11),
-                         width=62, anchor="w",
-                         text_color=("gray35", "gray65")).pack(side="left")
-            pct = item["score"] / item["max"] if item["max"] > 0 else 0
-            bar_bg = ctk.CTkFrame(dim_row, fg_color=("gray90", "gray22"),
-                                  height=12, corner_radius=6)
-            bar_bg.pack(side="left", fill="x", expand=True, padx=(6, 6))
-            bar_fill = ctk.CTkFrame(bar_bg, fg_color=dim_colors.get(key, "#888"),
-                                    height=12, corner_radius=6)
-            bar_fill.place(relx=0, rely=0, relheight=1, relwidth=max(pct, 0.02))
-            ctk.CTkLabel(dim_row, text=f"{item['score']}/{item['max']}",
-                         font=ctk.CTkFont(size=11), width=34,
-                         text_color=("gray40", "gray60")).pack(side="left")
+            bar = ProgressBar(item["label"], item["score"], item["max"],
+                              color=dim_colors.get(key, '#888'), show_value=True)
+            bar.set_bar_width(300)
+            self.bar_frame.addWidget(bar)
 
-    # ==================== Stat Cards ====================
-    def _make_stat_card(self, parent, title: str, color: str, row: int, col: int):
-        card = ctk.CTkFrame(parent, corner_radius=12, fg_color=("gray90", "gray20"))
-        card.grid(row=row, column=col, padx=6, pady=6, sticky="ew")
-        indicator = ctk.CTkFrame(card, height=4, fg_color=color, corner_radius=0)
-        indicator.pack(fill="x", padx=1, pady=(1, 0))
-        inner = ctk.CTkFrame(card, fg_color="transparent")
-        inner.pack(fill="both", expand=True, padx=16, pady=(10, 14))
-        ctk.CTkLabel(inner, text=title, font=ctk.CTkFont(size=13),
-                     text_color=("gray40", "gray60")).pack(anchor="w")
-        amount_label = ctk.CTkLabel(inner, text="¥ 0.00",
-                                    font=ctk.CTkFont(size=26, weight="bold"))
-        amount_label.pack(anchor="w", pady=(2, 0))
-        card.amount_label = amount_label
-        return card
+    def _add_recent_row(self, bill):
+        row = QHBoxLayout()
+        row.setSpacing(12)
 
-    def _set_card(self, card, value):
-        card.amount_label.configure(text=f"¥ {value:,.2f}")
+        cat_name = bill.category_name or "未分类"
+        row.addWidget(make_label(cat_name, 13))
 
-    # ==================== Lifecycle ====================
+        desc = bill.description or ""
+        if desc:
+            row.addWidget(make_label(desc[:20], 12, color=COLORS['text_tertiary']))
+
+        row.addStretch()
+
+        date_str = bill.bill_date.isoformat() if bill.bill_date else ""
+        row.addWidget(make_label(date_str, 12, color=COLORS['text_tertiary']))
+
+        sign = "+" if bill.type == "income" else "-"
+        color = COLORS['success'] if bill.type == "income" else COLORS['danger']
+        row.addWidget(make_label(f"{sign}¥{bill.amount:,.2f}", 14, True, color))
+
+        self.recent_list.addLayout(row)
+
     def on_show(self):
         self.refresh()
 
@@ -265,51 +225,25 @@ class DashboardPage(ctk.CTkFrame):
         today = date.today()
         month_start, month_end = get_month_range()
 
-        # weekly report
         self._load_report()
 
-        # health score
         health = calculate_health_score(self.db)
         self._update_health_card(health)
 
-        # stats
         today_summary = self.db.get_summary(today, today)
         month_summary = self.db.get_summary(month_start, month_end)
-        self._set_card(self.today_income_card, today_summary.total_income)
-        self._set_card(self.today_expense_card, today_summary.total_expense)
-        self._set_card(self.today_balance_card, today_summary.balance)
-        self._set_card(self.month_income_card, month_summary.total_income)
-        self._set_card(self.month_expense_card, month_summary.total_expense)
-        self._set_card(self.month_balance_card, month_summary.balance)
+        self.today_income.set_value(today_summary.total_income)
+        self.today_expense.set_value(today_summary.total_expense)
+        self.today_balance.set_value(today_summary.balance)
+        self.month_income.set_value(month_summary.total_income)
+        self.month_expense.set_value(month_summary.total_expense)
+        self.month_balance.set_value(month_summary.balance)
 
-        # recent bills
-        for w in self.recent_list.winfo_children():
-            w.destroy()
+        clear_layout(self.recent_list)
+
         bills = self.db.get_bills(limit=5)
         if not bills:
-            ctk.CTkLabel(self.recent_list, text="暂无账单记录",
-                         text_color=("gray40", "gray60"),
-                         font=ctk.CTkFont(size=13)).pack(pady=20)
+            self.recent_list.addWidget(EmptyState("📭", "暂无账单", "开始记一笔吧"))
         else:
             for bill in bills:
                 self._add_recent_row(bill)
-
-    def _add_recent_row(self, bill):
-        row = ctk.CTkFrame(self.recent_list, fg_color="transparent", height=40)
-        row.pack(fill="x", padx=5, pady=1)
-        sign = "+" if bill.type == "income" else "-"
-        color = "#4CAF50" if bill.type == "income" else "#F44336"
-        cat_name = bill.category_name or "未分类"
-        desc = bill.description or ""
-        date_str = bill.bill_date.isoformat() if bill.bill_date else ""
-        ctk.CTkLabel(row, text=cat_name, font=ctk.CTkFont(size=13)).pack(
-            side="left", padx=(5, 10))
-        if desc:
-            ctk.CTkLabel(row, text=desc[:20], font=ctk.CTkFont(size=12),
-                         text_color=("gray40", "gray60")).pack(
-                side="left", padx=(0, 10))
-        ctk.CTkLabel(row, text=date_str, font=ctk.CTkFont(size=12),
-                     text_color=("gray40", "gray60")).pack(side="right", padx=(0, 5))
-        ctk.CTkLabel(row, text=f"{sign}¥{bill.amount:,.2f}",
-                     font=ctk.CTkFont(size=14, weight="bold"),
-                     text_color=color).pack(side="right", padx=10)

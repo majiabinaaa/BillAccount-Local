@@ -1,97 +1,213 @@
-import customtkinter as ctk
-from datetime import date
-from tkinter import messagebox
+"""Bill list page - clean table with refined filters."""
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                               QPushButton, QFrame, QTableWidget, QTableWidgetItem,
+                               QLineEdit, QComboBox, QHeaderView, QMessageBox,
+                               QDialog, QDateEdit, QCalendarWidget)
+from PySide6.QtCore import Qt, QDate
+from PySide6.QtGui import QFont, QColor
 
+from datetime import date
+from ui.theme import COLORS, set_css_class, FONT_FAMILY
+from ui.utils import make_label, make_title, make_subtitle
+from ui.components.empty_state import EmptyState
 from core.models import Bill
 
 
-class BillListPage(ctk.CTkFrame):
-    def __init__(self, master, app, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
+class DatePicker(QWidget):
+    """Date picker with a text display and a calendar button."""
+    def __init__(self, initial_date=None, parent=None):
+        super().__init__(parent)
+        self._date = initial_date or date.today()
+        self._popup = None
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        self._display = QLineEdit()
+        self._display.setReadOnly(True)
+        self._display.setFixedHeight(36)
+        self._display.setMinimumWidth(110)
+        self._display.setText(self._date.isoformat())
+        self._display.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {COLORS['surface']};
+                border: 1px solid {COLORS['input_border']};
+                border-radius: 8px;
+                padding: 8px 10px;
+                font-size: 13px;
+                color: {COLORS['text_primary']};
+                font-family: {FONT_FAMILY};
+            }}
+        """)
+        layout.addWidget(self._display)
+
+        self._btn = QPushButton("📅")
+        self._btn.setFixedSize(36, 36)
+        self._btn.setCursor(Qt.PointingHandCursor)
+        self._btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {COLORS['border_light']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 8px;
+                font-size: 16px;
+            }}
+            QPushButton:hover {{
+                background-color: {COLORS['border']};
+            }}
+        """)
+        self._btn.clicked.connect(self._show_calendar)
+        layout.addWidget(self._btn)
+
+    def date(self):
+        return self._date
+
+    def setDate(self, d):
+        self._date = d
+        self._display.setText(d.isoformat())
+
+    def _show_calendar(self):
+        if self._popup and self._popup.isVisible():
+            self._popup.close()
+            return
+
+        self._popup = QWidget(self, Qt.Popup)
+        self._popup.setStyleSheet(f"""
+            QWidget {{
+                background: {COLORS['surface']};
+                border: 1px solid {COLORS['border']};
+                border-radius: 10px;
+            }}
+        """)
+        cal_layout = QVBoxLayout(self._popup)
+        cal_layout.setContentsMargins(4, 4, 4, 4)
+
+        cal = QCalendarWidget()
+        cal.setSelectedDate(QDate(self._date.year, self._date.month, self._date.day))
+        cal.setGridVisible(True)
+        cal.setStyleSheet(f"""
+            QCalendarWidget {{
+                background: transparent;
+                border: none;
+            }}
+            QCalendarWidget QToolButton {{
+                color: {COLORS['text_primary']};
+                background: transparent;
+                font-size: 13px;
+            }}
+            QCalendarWidget QAbstractItemView {{
+                selection-background-color: {COLORS['primary']};
+                selection-color: white;
+            }}
+        """)
+        cal.clicked.connect(lambda d: self._on_date_selected(d))
+        cal_layout.addWidget(cal)
+
+        # Position below the button
+        btn_pos = self._btn.mapToGlobal(self._btn.rect().bottomLeft())
+        self._popup.move(btn_pos)
+        self._popup.show()
+
+    def _on_date_selected(self, qdate):
+        self._date = qdate.toPython()
+        self._display.setText(self._date.isoformat())
+        if self._popup:
+            self._popup.close()
+
+
+class BillListPage(QWidget):
+    def __init__(self, app, parent=None):
+        super().__init__(parent)
         self.app = app
         self.db = app.db
         self._offset = 0
         self._page_size = 50
-        self._edit_bill = None
+        self._setup_ui()
 
-        self.grid_rowconfigure(2, weight=1)
-        self.grid_columnconfigure(0, weight=1)
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(36, 24, 36, 24)
+        layout.setSpacing(20)
 
-        # --- Header ---
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.grid(row=0, column=0, sticky="ew", padx=25, pady=(25, 10))
-        ctk.CTkLabel(header, text="账单列表",
-                     font=ctk.CTkFont(size=26, weight="bold")).pack(side="left")
+        # Header
+        header = QHBoxLayout()
+        header.addWidget(make_title("账单列表"))
+        header.addStretch()
+        layout.addLayout(header)
 
-        # --- Filters ---
-        filter_frame = ctk.CTkFrame(self)
-        filter_frame.grid(row=1, column=0, sticky="ew", padx=25, pady=(0, 10))
-        filter_frame.grid_columnconfigure(7, weight=1)
+        # Filters
+        filter_layout = QHBoxLayout()
+        filter_layout.setSpacing(10)
 
-        ctk.CTkLabel(filter_frame, text="开始:", font=ctk.CTkFont(size=12)).grid(
-            row=0, column=0, padx=(12, 2), pady=8)
-        self.start_date = ctk.CTkEntry(filter_frame, width=110, placeholder_text="YYYY-MM-DD")
-        self.start_date.grid(row=0, column=1, padx=(0, 8), pady=8)
+        self.start_date = DatePicker(date(2020, 1, 1))
+        filter_layout.addWidget(self.start_date)
 
-        ctk.CTkLabel(filter_frame, text="结束:", font=ctk.CTkFont(size=12)).grid(
-            row=0, column=2, padx=(0, 2), pady=8)
-        self.end_date = ctk.CTkEntry(filter_frame, width=110, placeholder_text="YYYY-MM-DD")
-        self.end_date.grid(row=0, column=3, padx=(0, 8), pady=8)
+        filter_layout.addWidget(make_label("~", 13, color=COLORS['text_tertiary']))
 
-        self.type_var = ctk.StringVar(value="全部")
-        self.type_menu = ctk.CTkOptionMenu(filter_frame, values=["全部", "支出", "收入"],
-                                           variable=self.type_var, width=80)
-        self.type_menu.grid(row=0, column=4, padx=(0, 8), pady=8)
+        self.end_date = DatePicker(date.today())
+        filter_layout.addWidget(self.end_date)
 
-        self.keyword_entry = ctk.CTkEntry(filter_frame, width=140, placeholder_text="搜索备注...")
-        self.keyword_entry.grid(row=0, column=5, padx=(0, 8), pady=8)
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(["全部", "支出", "收入"])
+        self.type_combo.setFixedHeight(36)
+        self.type_combo.setMinimumWidth(80)
+        filter_layout.addWidget(self.type_combo)
 
-        search_btn = ctk.CTkButton(filter_frame, text="搜索", width=70,
-                                   command=self._search)
-        search_btn.grid(row=0, column=6, padx=(0, 16), pady=8)
+        self.keyword_entry = QLineEdit()
+        self.keyword_entry.setPlaceholderText("搜索备注...")
+        self.keyword_entry.setFixedHeight(36)
+        self.keyword_entry.setMinimumWidth(120)
+        filter_layout.addWidget(self.keyword_entry)
 
-        # --- Table ---
-        self.table_frame = ctk.CTkScrollableFrame(self, fg_color=("gray95", "gray13"))
-        self.table_frame.grid(row=2, column=0, sticky="nsew", padx=25, pady=(0, 5))
+        search_btn = QPushButton("搜索")
+        search_btn.setCursor(Qt.PointingHandCursor)
+        search_btn.setFixedHeight(36)
+        search_btn.setMinimumWidth(64)
+        set_css_class(search_btn, "primary-btn")
+        search_btn.clicked.connect(self._search)
+        filter_layout.addWidget(search_btn)
 
-        # Table header
-        self._build_table_header()
+        filter_layout.addStretch()
+        layout.addLayout(filter_layout)
 
-        # --- Pagination ---
-        nav_frame = ctk.CTkFrame(self, fg_color="transparent")
-        nav_frame.grid(row=3, column=0, sticky="ew", padx=25, pady=(5, 20))
-        self.prev_btn = ctk.CTkButton(nav_frame, text="上一页", width=80,
-                                      command=self._prev_page)
-        self.prev_btn.pack(side="left")
-        self.page_label = ctk.CTkLabel(nav_frame, text="第 1 页", font=ctk.CTkFont(size=13))
-        self.page_label.pack(side="left", padx=15)
-        self.next_btn = ctk.CTkButton(nav_frame, text="下一页", width=80,
-                                      command=self._next_page)
-        self.next_btn.pack(side="left")
+        # Table
+        self.table = QTableWidget()
+        self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels(["日期", "类型", "分类", "金额", "备注", "操作"])
+        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Fixed)
+        self.table.setColumnWidth(5, 120)
+        self.table.verticalHeader().setVisible(False)
+        self.table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setAlternatingRowColors(True)
+        layout.addWidget(self.table, 1)
 
-        # Total count
-        self.total_label = ctk.CTkLabel(nav_frame, text="",
-                                        font=ctk.CTkFont(size=13), text_color=("gray40", "gray60"))
-        self.total_label.pack(side="right")
+        # Pagination
+        nav_layout = QHBoxLayout()
 
-        # --- Edit dialog (hidden by default) ---
-        self._edit_form = None
+        self.prev_btn = QPushButton("上一页")
+        self.prev_btn.setCursor(Qt.PointingHandCursor)
+        set_css_class(self.prev_btn, "ghost-btn")
+        self.prev_btn.clicked.connect(self._prev_page)
+        self.prev_btn.setEnabled(False)
+        nav_layout.addWidget(self.prev_btn)
 
-    def _build_table_header(self):
-        header = ctk.CTkFrame(self.table_frame, fg_color=("gray85", "gray25"), height=36)
-        header.pack(fill="x", padx=1, pady=(1, 0))
-        cols = [
-            ("日期", 0, 120),
-            ("类型", 1, 70),
-            ("分类", 2, 90),
-            ("金额", 3, 110),
-            ("备注", 4, 180),
-            ("操作", 5, 120),
-        ]
-        for text, col, width in cols:
-            lbl = ctk.CTkLabel(header, text=text, font=ctk.CTkFont(size=12, weight="bold"),
-                             width=width)
-            lbl.pack(side="left", padx=4, pady=5)
+        self.page_label = make_label("第 1 页", 13, color=COLORS['text_tertiary'])
+        nav_layout.addWidget(self.page_label)
+
+        self.next_btn = QPushButton("下一页")
+        self.next_btn.setCursor(Qt.PointingHandCursor)
+        set_css_class(self.next_btn, "ghost-btn")
+        self.next_btn.clicked.connect(self._next_page)
+        self.next_btn.setEnabled(False)
+        nav_layout.addWidget(self.next_btn)
+
+        nav_layout.addStretch()
+        self.total_label = make_label("", 13, color=COLORS['text_tertiary'])
+        nav_layout.addWidget(self.total_label)
+
+        layout.addLayout(nav_layout)
 
     def _search(self):
         self._offset = 0
@@ -107,116 +223,103 @@ class BillListPage(ctk.CTkFrame):
         self._load_bills()
 
     def _load_bills(self):
-        # clear table (keep header)
-        for w in self.table_frame.winfo_children()[1:]:
-            w.destroy()
-
-        # parse filters
-        start = None
-        end = None
-        try:
-            s = self.start_date.get().strip()
-            if s:
-                start = date.fromisoformat(s)
-        except (ValueError, TypeError):
-            start = None
-        try:
-            e = self.end_date.get().strip()
-            if e:
-                end = date.fromisoformat(e)
-        except (ValueError, TypeError):
-            end = None
+        self.table.setRowCount(0)
+        start = self.start_date.date()
+        end = self.end_date.date()
 
         bill_type = None
-        type_display = self.type_var.get()
+        type_display = self.type_combo.currentText()
         if type_display == "支出":
             bill_type = "expense"
         elif type_display == "收入":
             bill_type = "income"
 
-        keyword = self.keyword_entry.get().strip()
-
-        bills = self.db.get_bills(
-            start_date=start, end_date=end,
-            bill_type=bill_type, keyword=keyword,
-            limit=self._page_size, offset=self._offset,
-        )
-        total = self.db.get_bill_count(
-            start_date=start, end_date=end,
-            bill_type=bill_type, keyword=keyword,
-        )
+        keyword = self.keyword_entry.text().strip()
+        bills = self.db.get_bills(start_date=start, end_date=end, bill_type=bill_type,
+                                  keyword=keyword, limit=self._page_size, offset=self._offset)
+        total = self.db.get_bill_count(start_date=start, end_date=end, bill_type=bill_type, keyword=keyword)
 
         current_page = self._offset // self._page_size + 1
         total_pages = max(1, (total + self._page_size - 1) // self._page_size)
-        self.page_label.configure(text=f"第 {current_page}/{total_pages} 页")
-        self.total_label.configure(text=f"共 {total} 条记录")
+        self.page_label.setText(f"第 {current_page}/{total_pages} 页")
+        self.total_label.setText(f"共 {total} 条记录")
 
-        self.prev_btn.configure(state="normal" if self._offset > 0 else "disabled")
-        self.next_btn.configure(state="normal" if self._offset + self._page_size < total else "disabled")
-
-        if not bills:
-            ctk.CTkLabel(self.table_frame, text="暂无数据",
-                         text_color=("gray40", "gray60"), font=ctk.CTkFont(size=14)).pack(pady=30)
-            return
+        self.prev_btn.setEnabled(self._offset > 0)
+        self.next_btn.setEnabled(self._offset + self._page_size < total)
 
         for bill in bills:
             self._add_bill_row(bill)
 
     def _add_bill_row(self, bill: Bill):
-        row = ctk.CTkFrame(self.table_frame, fg_color="transparent", height=38)
-        row.pack(fill="x", padx=1, pady=0)
+        row = self.table.rowCount()
+        self.table.insertRow(row)
 
         date_str = bill.bill_date.isoformat() if bill.bill_date else ""
         type_str = "收入" if bill.type == "income" else "支出"
-        type_color = "#4CAF50" if bill.type == "income" else "#F44336"
+        type_color = COLORS['success'] if bill.type == "income" else COLORS['danger']
         amount_str = f"{'+' if bill.type == 'income' else '-'}¥ {bill.amount:,.2f}"
         cat_str = bill.category_name or "-"
-        desc_str = bill.description[:30] or "-"
+        desc_str = (bill.description or "")[:30] or "-"
 
-        ctk.CTkLabel(row, text=date_str, font=ctk.CTkFont(size=12), width=120).pack(
-            side="left", padx=4, pady=6)
-        ctk.CTkLabel(row, text=type_str, font=ctk.CTkFont(size=12, weight="bold"),
-                     text_color=type_color, width=70).pack(side="left", padx=4, pady=6)
-        ctk.CTkLabel(row, text=cat_str, font=ctk.CTkFont(size=12), width=90).pack(
-            side="left", padx=4, pady=6)
-        ctk.CTkLabel(row, text=amount_str, font=ctk.CTkFont(size=13, weight="bold"),
-                     text_color=type_color, width=110).pack(side="left", padx=4, pady=6)
-        ctk.CTkLabel(row, text=desc_str, font=ctk.CTkFont(size=12),
-                     text_color=("gray45", "gray55"), width=180).pack(side="left", padx=4, pady=6)
+        self.table.setItem(row, 0, QTableWidgetItem(date_str))
 
-        btn_frame = ctk.CTkFrame(row, fg_color="transparent", width=120)
-        btn_frame.pack(side="left", padx=4, pady=4)
-        edit_btn = ctk.CTkButton(btn_frame, text="编辑", width=50, height=28,
-                                 font=ctk.CTkFont(size=11),
-                                 command=lambda b=bill: self._show_edit(b))
-        edit_btn.pack(side="left", padx=(0, 4))
-        del_btn = ctk.CTkButton(btn_frame, text="删除", width=50, height=28,
-                                font=ctk.CTkFont(size=11),
-                                fg_color="#C62828", hover_color="#B71C1C",
-                                command=lambda b=bill: self._delete_bill(b))
-        del_btn.pack(side="left")
+        type_item = QTableWidgetItem(type_str)
+        type_item.setForeground(QColor(type_color))
+        self.table.setItem(row, 1, type_item)
 
-        # separator line
-        sep = ctk.CTkFrame(self.table_frame, height=1, fg_color=("gray85", "gray25"))
-        sep.pack(fill="x", padx=4)
+        self.table.setItem(row, 2, QTableWidgetItem(cat_str))
+
+        amount_item = QTableWidgetItem(amount_str)
+        amount_item.setForeground(QColor(type_color))
+        font = QFont()
+        font.setFamily(FONT_FAMILY)
+        font.setBold(True)
+        amount_item.setFont(font)
+        self.table.setItem(row, 3, amount_item)
+
+        self.table.setItem(row, 4, QTableWidgetItem(desc_str))
+
+        # Action buttons
+        action_widget = QWidget()
+        action_layout = QHBoxLayout(action_widget)
+        action_layout.setContentsMargins(4, 4, 4, 4)
+        action_layout.setSpacing(4)
+
+        edit_btn = QPushButton("编辑")
+        edit_btn.setCursor(Qt.PointingHandCursor)
+        set_css_class(edit_btn, "link-btn")
+        edit_btn.setStyleSheet(f"color: {COLORS['primary']};")
+        edit_btn.clicked.connect(lambda checked, b=bill: self._show_edit(b))
+        action_layout.addWidget(edit_btn)
+
+        del_btn = QPushButton("删除")
+        del_btn.setCursor(Qt.PointingHandCursor)
+        set_css_class(del_btn, "link-btn")
+        del_btn.setStyleSheet(f"color: {COLORS['danger']};")
+        del_btn.clicked.connect(lambda checked, b=bill: self._delete_bill(b))
+        action_layout.addWidget(del_btn)
+
+        self.table.setCellWidget(row, 5, action_widget)
 
     def _delete_bill(self, bill: Bill):
-        if messagebox.askyesno("确认删除", f"确定要删除这笔账单吗？\n¥{bill.amount:,.2f}"):
+        reply = QMessageBox.question(self, "确认删除", f"确定要删除这笔账单吗？\n¥{bill.amount:,.2f}",
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
             self.db.delete_bill(bill.id)
             self._load_bills()
 
     def _show_edit(self, bill: Bill):
-        dialog = ctk.CTkToplevel(self)
-        dialog.title("编辑账单")
-        dialog.geometry("480x440")
-        dialog.transient(self)
-        dialog.grab_set()
-        dialog.resizable(False, False)
+        dialog = QDialog(self)
+        dialog.setWindowTitle("编辑账单")
+        dialog.setFixedSize(480, 440)
+        dialog.setWindowModality(Qt.WindowModal)
 
         from ui.components.bill_form import BillForm
-        form = BillForm(dialog, self.app, bill=bill,
-                        on_save=lambda: [self._load_bills(), dialog.destroy()])
-        form.pack(fill="both", expand=True)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(24, 24, 24, 24)
+        form = BillForm(self.app, bill=bill, on_save=lambda: [self._load_bills(), dialog.accept()])
+        layout.addWidget(form)
+        dialog.exec()
 
     def on_show(self):
         self._offset = 0

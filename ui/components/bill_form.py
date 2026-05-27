@@ -1,126 +1,196 @@
-import customtkinter as ctk
+"""Reusable bill entry/edit form with Apple-style design."""
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                               QLineEdit, QPushButton, QComboBox, QDateEdit,
+                               QFrame)
+from PySide6.QtCore import Qt, QDate
+from PySide6.QtGui import QFont
+
 from datetime import date
-from typing import Callable
+from typing import Callable, Optional
 
-from core.models import Bill, Category
+from core.models import Bill
+from ui.theme import COLORS, set_css_class, FONT_FAMILY
+from ui.utils import make_label
 
 
-class BillForm(ctk.CTkFrame):
-    """Reusable bill entry/edit form."""
-
-    def __init__(self, master, app, bill: Bill = None, on_save: Callable = None, **kwargs):
-        super().__init__(master, **kwargs)
+class BillForm(QWidget):
+    def __init__(self, app, bill: Optional[Bill] = None, on_save: Callable = None, parent=None):
+        super().__init__(parent)
         self.app = app
         self.db = app.db
-        self.bill = bill  # if editing, the bill to edit
+        self.bill = bill
         self.on_save = on_save
-
         self._build_form()
         if bill:
             self._populate(bill)
 
     def _build_form(self):
-        # title
-        ctk.CTkLabel(self, text="金额", font=ctk.CTkFont(size=14, weight="bold")).grid(
-            row=0, column=0, sticky="w", padx=(20, 10), pady=(15, 5))
-        self.amount_entry = ctk.CTkEntry(self, placeholder_text="输入金额", height=40,
-                                         font=ctk.CTkFont(size=20),
-                                         width=280)
-        self.amount_entry.grid(row=1, column=0, columnspan=3, padx=20, pady=(0, 10), sticky="ew")
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(24)
 
-        # type switch
-        ctk.CTkLabel(self, text="类型", font=ctk.CTkFont(size=14, weight="bold")).grid(
-            row=2, column=0, sticky="w", padx=(20, 10), pady=(5, 5))
-        self.type_var = ctk.StringVar(value="expense")
-        self.type_seg = ctk.CTkSegmentedButton(
-            self, values=["支出", "收入"],
-            variable=self.type_var,
-            command=self._on_type_change,
-        )
-        # map display values to internal values
-        self._type_map = {"支出": "expense", "收入": "income"}
-        self.type_seg.grid(row=3, column=0, columnspan=2, padx=20, pady=(0, 10), sticky="w")
+        # Amount
+        layout.addWidget(make_label("金额", 14, True))
+        self.amount_entry = QLineEdit()
+        self.amount_entry.setPlaceholderText("输入金额")
+        self.amount_entry.setFixedHeight(52)
+        font = QFont()
+        font.setFamily(FONT_FAMILY)
+        font.setPointSize(22)
+        self.amount_entry.setFont(font)
+        set_css_class(self.amount_entry, "underline-input")
+        layout.addWidget(self.amount_entry)
 
-        # category
-        ctk.CTkLabel(self, text="分类", font=ctk.CTkFont(size=14, weight="bold")).grid(
-            row=4, column=0, sticky="w", padx=(20, 10), pady=(5, 5))
-        self.category_var = ctk.StringVar()
-        self.category_menu = ctk.CTkOptionMenu(self, variable=self.category_var,
-                                               values=[], width=200)
-        self.category_menu.grid(row=5, column=0, padx=20, pady=(0, 10), sticky="w")
+        # Type selector - two separate buttons
+        layout.addWidget(make_label("类型", 14, True))
+        type_row = QHBoxLayout()
+        type_row.setSpacing(12)
 
-        # date
-        ctk.CTkLabel(self, text="日期", font=ctk.CTkFont(size=14, weight="bold")).grid(
-            row=4, column=1, sticky="w", padx=(20, 10), pady=(5, 5))
-        self.date_var = ctk.StringVar(value=date.today().isoformat())
-        self.date_entry = ctk.CTkEntry(self, textvariable=self.date_var, width=140,
-                                       placeholder_text="YYYY-MM-DD")
-        self.date_entry.grid(row=5, column=1, padx=20, pady=(0, 10), sticky="w")
+        self.type_buttons = {}
+        for text, value in [("支出", "expense"), ("收入", "income")]:
+            btn = QPushButton(text)
+            btn.setCheckable(True)
+            btn.setFixedHeight(44)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setMinimumWidth(120)
+            btn.clicked.connect(lambda checked, v=value: self._on_type_change(v))
+            type_row.addWidget(btn)
+            self.type_buttons[value] = btn
 
-        # description
-        ctk.CTkLabel(self, text="备注", font=ctk.CTkFont(size=14, weight="bold")).grid(
-            row=6, column=0, sticky="w", padx=(20, 10), pady=(5, 5))
-        self.desc_entry = ctk.CTkEntry(self, placeholder_text="添加备注 (可选)",
-                                       height=36, width=400)
-        self.desc_entry.grid(row=7, column=0, columnspan=3, padx=20, pady=(0, 10), sticky="ew")
+        type_row.addStretch()
+        layout.addLayout(type_row)
 
-        # submit button
+        self.type_buttons["expense"].setChecked(True)
+        self._current_type = "expense"
+        self._update_type_button_styles()
+
+        # Category and Date
+        row = QHBoxLayout()
+        row.setSpacing(20)
+
+        cat_col = QVBoxLayout()
+        cat_col.setSpacing(8)
+        cat_col.addWidget(make_label("分类", 14, True))
+        self.category_combo = QComboBox()
+        self.category_combo.setFixedHeight(40)
+        cat_col.addWidget(self.category_combo)
+        row.addLayout(cat_col, 1)
+
+        date_col = QVBoxLayout()
+        date_col.setSpacing(8)
+        date_col.addWidget(make_label("日期", 14, True))
+        self.date_edit = QDateEdit()
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDate(QDate.currentDate())
+        self.date_edit.setFixedHeight(40)
+        self.date_edit.setDisplayFormat("yyyy-MM-dd")
+        date_col.addWidget(self.date_edit)
+        row.addLayout(date_col, 1)
+
+        layout.addLayout(row)
+
+        # Description
+        layout.addWidget(make_label("备注", 14, True))
+        self.desc_entry = QLineEdit()
+        self.desc_entry.setPlaceholderText("添加备注 (可选)")
+        self.desc_entry.setFixedHeight(40)
+        layout.addWidget(self.desc_entry)
+
+        # Error label
+        self.error_label = QLabel()
+        set_css_class(self.error_label, "error-text")
+        layout.addWidget(self.error_label)
+
+        # Submit button
         btn_text = "修改账单" if self.bill else "记一笔"
-        self.submit_btn = ctk.CTkButton(self, text=btn_text,
-                                        font=ctk.CTkFont(size=15, weight="bold"),
-                                        height=44,
-                                        command=self._submit)
-        self.submit_btn.grid(row=8, column=0, columnspan=3, padx=20, pady=(10, 20), sticky="ew")
+        self.submit_btn = QPushButton(btn_text)
+        self.submit_btn.setFixedHeight(48)
+        self.submit_btn.setCursor(Qt.PointingHandCursor)
+        set_css_class(self.submit_btn, "primary-btn")
+        self.submit_btn.setStyleSheet(f"""
+            QPushButton {{
+                border-radius: 24px;
+                font-size: 16px;
+            }}
+        """)
+        self.submit_btn.clicked.connect(self._submit)
+        layout.addWidget(self.submit_btn)
 
-        # initialize categories
         self._load_categories()
 
     def _load_categories(self):
-        bill_type = self._type_map.get(self.type_var.get(), "expense")
-        cats = self.db.get_categories(bill_type)
-        names = [c.name for c in cats]
-        self.category_menu.configure(values=names)
-        if names:
-            self.category_var.set(names[0])
+        cats = self.db.get_categories(self._current_type)
+        self.category_combo.clear()
+        for c in cats:
+            self.category_combo.addItem(c.name, c.id)
 
     def _on_type_change(self, value):
+        self._current_type = value
+        for v, btn in self.type_buttons.items():
+            btn.setChecked(v == value)
+        self._update_type_button_styles()
         self._load_categories()
 
+    def _update_type_button_styles(self):
+        colors = {
+            "expense": (COLORS['danger'], COLORS['danger_light']),
+            "income": (COLORS['success'], COLORS['success_light']),
+        }
+        for v, btn in self.type_buttons.items():
+            is_active = btn.isChecked()
+            accent, bg = colors[v]
+            if is_active:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {accent};
+                        color: white;
+                        border: 2px solid {accent};
+                        border-radius: 10px;
+                        font-size: 15px;
+                        font-weight: 700;
+                        font-family: {FONT_FAMILY};
+                    }}
+                """)
+            else:
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: transparent;
+                        color: {COLORS['text_secondary']};
+                        border: 2px solid {COLORS['border']};
+                        border-radius: 10px;
+                        font-size: 15px;
+                        font-weight: 600;
+                        font-family: {FONT_FAMILY};
+                    }}
+                    QPushButton:hover {{
+                        border-color: {accent};
+                        color: {accent};
+                    }}
+                """)
+
     def _submit(self):
-        amount_str = self.amount_entry.get().strip()
+        amount_str = self.amount_entry.text().strip()
         if not amount_str:
+            self.error_label.setText("请输入金额")
             return
         try:
             amount = float(amount_str)
         except ValueError:
+            self.error_label.setText("金额格式无效")
             return
         if amount <= 0:
+            self.error_label.setText("金额必须大于 0")
             return
+        self.error_label.setText("")
 
-        bill_type = self._type_map.get(self.type_var.get(), "expense")
-        category_name = self.category_var.get()
-        description = self.desc_entry.get().strip()
-        bill_date_str = self.date_var.get().strip()
-
-        try:
-            bill_date = date.fromisoformat(bill_date_str)
-        except (ValueError, TypeError):
-            bill_date = date.today()
-
-        # resolve category id
-        cats = self.db.get_categories(bill_type)
-        cat_id = None
-        for c in cats:
-            if c.name == category_name:
-                cat_id = c.id
-                break
-        if cat_id is None and cats:
-            cat_id = cats[0].id
+        cat_id = self.category_combo.currentData()
+        description = self.desc_entry.text().strip()
+        bill_date = self.date_edit.date().toPython()
 
         bill = Bill(
             id=self.bill.id if self.bill else None,
             amount=amount,
-            type=bill_type,
+            type=self._current_type,
             category_id=cat_id,
             description=description,
             bill_date=bill_date,
@@ -135,18 +205,19 @@ class BillForm(ctk.CTkFrame):
             self.on_save()
 
     def _populate(self, bill: Bill):
-        self.amount_entry.insert(0, str(bill.amount))
-        display_type = "收入" if bill.type == "income" else "支出"
-        self.type_var.set(display_type)
-        self._load_categories()
+        self.amount_entry.setText(str(bill.amount))
+        self._on_type_change(bill.type)
         if bill.category_name:
-            self.category_var.set(bill.category_name)
-        self.desc_entry.insert(0, bill.description)
-        self.date_var.set(bill.bill_date.isoformat() if bill.bill_date else "")
+            idx = self.category_combo.findText(bill.category_name)
+            if idx >= 0:
+                self.category_combo.setCurrentIndex(idx)
+        self.desc_entry.setText(bill.description or "")
+        if bill.bill_date:
+            self.date_edit.setDate(QDate(bill.bill_date.year, bill.bill_date.month, bill.bill_date.day))
 
     def clear(self):
-        self.amount_entry.delete(0, "end")
-        self.type_var.set("支出")
-        self._load_categories()
-        self.desc_entry.delete(0, "end")
-        self.date_var.set(date.today().isoformat())
+        self.amount_entry.clear()
+        self._on_type_change("expense")
+        self.desc_entry.clear()
+        self.date_edit.setDate(QDate.currentDate())
+        self.error_label.setText("")

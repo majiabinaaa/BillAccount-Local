@@ -1,142 +1,141 @@
+"""Settings page - grouped settings sections."""
 import os
-import customtkinter as ctk
-from tkinter import filedialog, messagebox
+import shutil
+from pathlib import Path
 
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                               QPushButton, QFrame, QLineEdit, QFileDialog,
+                               QMessageBox, QScrollArea)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
+
+from ui.theme import COLORS, set_css_class, FONT_FAMILY
+from ui.utils import make_label, make_title, make_heading, make_subtitle
+from ui.components.card import Card
 from utils.export_import import (
     export_csv_dialog, import_csv_dialog,
     export_json_dialog, import_json_dialog,
 )
 
 
-class SettingsPage(ctk.CTkFrame):
-    def __init__(self, master, app, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
+class SettingsPage(QWidget):
+    def __init__(self, app, parent=None):
+        super().__init__(parent)
         self.app = app
+        self._setup_ui()
 
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
+    def _setup_ui(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
 
-        container = ctk.CTkFrame(self)
-        container.grid(row=0, column=0, sticky="nsew", padx=25, pady=(25, 20))
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(36, 24, 36, 24)
+        layout.setSpacing(24)
 
-        ctk.CTkLabel(container, text="设置",
-                     font=ctk.CTkFont(size=24, weight="bold")).pack(pady=(20, 25))
+        # Header
+        layout.addWidget(make_title("设置"))
 
-        # --- Theme ---
-        theme_frame = ctk.CTkFrame(container)
-        theme_frame.pack(fill="x", padx=25, pady=(0, 15))
+        # Theme card
+        theme_card = Card(padding=(20, 20, 20, 20), spacing=8)
+        t_layout = theme_card.content_layout()
+        t_layout.addWidget(make_heading("外观主题"))
+        t_layout.addWidget(make_subtitle("当前使用浅色主题"))
+        layout.addWidget(theme_card)
 
-        ctk.CTkLabel(theme_frame, text="外观主题",
-                     font=ctk.CTkFont(size=16, weight="bold")).grid(
-            row=0, column=0, sticky="w", padx=18, pady=(15, 5))
+        # Data Path card
+        path_card = Card(padding=(20, 20, 20, 20), spacing=10)
+        p_layout = path_card.content_layout()
+        p_layout.addWidget(make_heading("数据存储路径"))
+        p_layout.addWidget(make_subtitle("更改后会自动迁移到新路径"))
 
-        ctk.CTkLabel(theme_frame, text="选择暗色/亮色模式，即时生效",
-                     font=ctk.CTkFont(size=12), text_color=("gray40", "gray60")).grid(
-            row=1, column=0, sticky="w", padx=18, pady=(0, 10))
+        path_row = QHBoxLayout()
+        path_row.setSpacing(8)
 
-        self._theme_map = {"暗色模式": "dark", "亮色模式": "light"}
-        self.theme_var = ctk.StringVar(
-            value="暗色模式" if self.app.config.theme == "dark" else "亮色模式"
-        )
-        self.theme_seg = ctk.CTkSegmentedButton(
-            theme_frame, values=["暗色模式", "亮色模式"],
-            variable=self.theme_var,
-            command=self._on_theme_change,
-        )
+        self.path_entry = QLineEdit()
+        self.path_entry.setText(self.app.config.data_path)
+        self.path_entry.setFixedHeight(36)
+        path_row.addWidget(self.path_entry)
 
-        self.theme_seg.grid(row=2, column=0, sticky="w", padx=18, pady=(0, 15))
+        browse_btn = QPushButton("浏览")
+        browse_btn.setFixedSize(70, 36)
+        browse_btn.setCursor(Qt.PointingHandCursor)
+        set_css_class(browse_btn, "secondary-btn")
+        browse_btn.clicked.connect(self._browse_path)
+        path_row.addWidget(browse_btn)
 
-        # --- Data Path ---
-        path_frame = ctk.CTkFrame(container)
-        path_frame.pack(fill="x", padx=25, pady=(0, 15))
+        p_layout.addLayout(path_row)
 
-        ctk.CTkLabel(path_frame, text="数据存储路径",
-                     font=ctk.CTkFont(size=16, weight="bold")).grid(
-            row=0, column=0, sticky="w", padx=18, pady=(15, 5))
+        save_path_btn = QPushButton("应用新路径")
+        save_path_btn.setFixedSize(130, 36)
+        save_path_btn.setCursor(Qt.PointingHandCursor)
+        set_css_class(save_path_btn, "primary-btn")
+        save_path_btn.clicked.connect(self._save_path)
+        p_layout.addWidget(save_path_btn)
 
-        ctk.CTkLabel(path_frame, text="更改后会自动迁移到新路径",
-                     font=ctk.CTkFont(size=12), text_color=("gray40", "gray60")).grid(
-            row=1, column=0, sticky="w", padx=18, pady=(0, 8))
+        layout.addWidget(path_card)
 
-        path_row = ctk.CTkFrame(path_frame, fg_color="transparent")
-        path_row.grid(row=2, column=0, sticky="ew", padx=18, pady=(0, 15))
-        path_row.grid_columnconfigure(0, weight=1)
+        # Import/Export card
+        io_card = Card(padding=(20, 20, 20, 20), spacing=10)
+        io_layout = io_card.content_layout()
+        io_layout.addWidget(make_heading("导入 & 导出"))
 
-        self.path_entry = ctk.CTkEntry(path_row, height=34)
-        self.path_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        self.path_entry.insert(0, self.app.config.data_path)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
 
-        browse_btn = ctk.CTkButton(path_row, text="浏览", width=70,
-                                   command=self._browse_path)
-        browse_btn.grid(row=0, column=1)
+        for text, handler in [
+            ("导出 CSV", lambda: export_csv_dialog(self.app)),
+            ("导入 CSV", lambda: import_csv_dialog(self.app)),
+            ("导出 JSON 备份", lambda: export_json_dialog(self.app)),
+            ("导入 JSON 备份", lambda: import_json_dialog(self.app)),
+        ]:
+            btn = QPushButton(text)
+            btn.setFixedHeight(36)
+            btn.setCursor(Qt.PointingHandCursor)
+            set_css_class(btn, "secondary-btn")
+            btn.clicked.connect(handler)
+            btn_row.addWidget(btn)
 
-        save_path_btn = ctk.CTkButton(path_frame, text="应用新路径", width=130,
-                                      command=self._save_path)
-        save_path_btn.grid(row=3, column=0, sticky="w", padx=18, pady=(0, 15))
+        btn_row.addStretch()
+        io_layout.addLayout(btn_row)
+        layout.addWidget(io_card)
 
-        # --- Import / Export ---
-        io_frame = ctk.CTkFrame(container)
-        io_frame.pack(fill="x", padx=25, pady=(0, 15))
+        # Danger zone
+        danger_card = Card(danger=True, spacing=8)
+        d_layout = danger_card.content_layout()
 
-        ctk.CTkLabel(io_frame, text="导入 & 导出",
-                     font=ctk.CTkFont(size=16, weight="bold")).grid(
-            row=0, column=0, sticky="w", padx=18, pady=(15, 5))
+        danger_title = QLabel("危险操作")
+        danger_title.setStyleSheet(f"color: {COLORS['danger']}; font-size: 15px; font-weight: bold; font-family: {FONT_FAMILY};")
+        d_layout.addWidget(danger_title)
 
-        btn_row = ctk.CTkFrame(io_frame, fg_color="transparent")
-        btn_row.grid(row=1, column=0, sticky="ew", padx=18, pady=(5, 15))
+        d_layout.addWidget(make_subtitle("清空所有账单数据，此操作不可撤销"))
 
-        ctk.CTkButton(btn_row, text="导出 CSV", width=110,
-                       command=lambda: export_csv_dialog(self.app)).pack(
-            side="left", padx=(0, 8))
-        ctk.CTkButton(btn_row, text="导入 CSV", width=110,
-                       command=lambda: import_csv_dialog(self.app)).pack(
-            side="left", padx=(0, 8))
-        ctk.CTkButton(btn_row, text="导出 JSON 备份", width=130,
-                       command=lambda: export_json_dialog(self.app)).pack(
-            side="left", padx=(0, 8))
-        ctk.CTkButton(btn_row, text="导入 JSON 备份", width=130,
-                       command=lambda: import_json_dialog(self.app)).pack(
-            side="left", padx=(0, 8))
+        clear_btn = QPushButton("清空所有数据")
+        clear_btn.setFixedSize(130, 36)
+        clear_btn.setCursor(Qt.PointingHandCursor)
+        set_css_class(clear_btn, "danger-btn")
+        clear_btn.clicked.connect(self._clear_all)
+        d_layout.addWidget(clear_btn)
 
-        # --- Danger zone ---
-        danger_frame = ctk.CTkFrame(container)
-        danger_frame.pack(fill="x", padx=25, pady=(0, 15))
+        layout.addWidget(danger_card)
+        layout.addStretch()
 
-        ctk.CTkLabel(danger_frame, text="危险操作",
-                     font=ctk.CTkFont(size=16, weight="bold"),
-                     text_color="#F44336").grid(
-            row=0, column=0, sticky="w", padx=18, pady=(15, 5))
-
-        ctk.CTkLabel(danger_frame, text="清空所有账单数据，此操作不可撤销",
-                     font=ctk.CTkFont(size=12), text_color=("gray40", "gray60")).grid(
-            row=1, column=0, sticky="w", padx=18, pady=(0, 8))
-
-        clear_btn = ctk.CTkButton(danger_frame, text="清空所有数据", width=130,
-                                  fg_color="#C62828", hover_color="#B71C1C",
-                                  command=self._clear_all)
-        clear_btn.grid(row=2, column=0, sticky="w", padx=18, pady=(0, 15))
-
-    def _on_theme_change(self, value):
-        theme = self._theme_map.get(value, "dark")
-        ctk.set_appearance_mode(theme)
-        self.app.config.theme = theme
-        self.app.main_window.refresh_all()
+        scroll.setWidget(content)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
 
     def _browse_path(self):
-        path = filedialog.askdirectory(title="选择数据存储目录")
+        path = QFileDialog.getExistingDirectory(self, "选择数据存储目录")
         if path:
-            self.path_entry.delete(0, "end")
-            self.path_entry.insert(0, path)
+            self.path_entry.setText(path)
 
     def _save_path(self):
-        raw_path = self.path_entry.get().strip()
+        raw_path = self.path_entry.text().strip()
         if not raw_path:
             return
-        import os
-        import shutil
-        from pathlib import Path
 
-        # normalize to absolute .db file path
         p = Path(raw_path)
         if p.is_dir() or p.suffix != ".db":
             p = p / "bill_data.db"
@@ -146,50 +145,45 @@ class SettingsPage(ctk.CTkFrame):
         if new_path == old_path:
             return
 
-        # find the actual source DB (current path may be stale from old buggy versions)
         src_path = old_path
         if not os.path.exists(src_path) or os.path.getsize(src_path) == 0:
-            # try default location
             default_db = str(Path(__file__).parent.parent.parent / "bill_data.db")
             if os.path.exists(default_db) and os.path.getsize(default_db) > 0:
                 src_path = default_db
 
-        # ensure parent directory exists
         os.makedirs(p.parent, exist_ok=True)
 
-        # copy existing DB to new location
         if os.path.exists(src_path) and os.path.getsize(src_path) > 0:
             try:
                 shutil.copy2(src_path, new_path)
             except Exception as e:
-                messagebox.showerror("错误", f"复制数据库失败:\n{e}")
+                QMessageBox.critical(self, "错误", f"复制数据库失败:\n{e}")
                 return
-        else:
-            # no existing data to migrate, new DB will be created
-            pass
 
-        # update config and reload
         self.app.config.data_path = new_path
         self.app.reload_database()
 
-        # verify the new DB is accessible
         count = self.app.db.get_bill_count()
-        self.path_entry.delete(0, "end")
-        self.path_entry.insert(0, new_path)
-        messagebox.showinfo(
-            "成功",
+        self.path_entry.setText(new_path)
+        QMessageBox.information(
+            self, "成功",
             f"数据路径已更改到:\n{new_path}\n\n当前账单数: {count} 条"
         )
 
     def _clear_all(self):
-        if messagebox.askyesno("确认清空", "确定要清空所有账单数据吗？\n此操作不可撤销！"):
+        reply = QMessageBox.question(
+            self, "确认清空",
+            "确定要清空所有账单数据吗？\n此操作不可撤销！",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
             self.app.db.delete_all_bills()
-            messagebox.showinfo("成功", "所有账单数据已清空")
+            QMessageBox.information(self, "成功", "所有账单数据已清空")
             self.app.main_window.refresh_all()
 
     def on_show(self):
-        self.path_entry.delete(0, "end")
-        self.path_entry.insert(0, self.app.config.data_path)
+        self.path_entry.setText(self.app.config.data_path)
 
     def refresh(self):
         pass

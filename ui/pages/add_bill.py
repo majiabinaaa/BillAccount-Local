@@ -1,30 +1,54 @@
-import customtkinter as ctk
-from datetime import date
-from tkinter import messagebox
+"""Add bill page - centered form layout."""
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QFrame, QScrollArea, QMessageBox
+from PySide6.QtCore import Qt
 
 from ui.components.bill_form import BillForm
+from ui.components.card import Card
+from ui.utils import make_title, make_subtitle
 
 
-class AddBillPage(ctk.CTkFrame):
-    def __init__(self, master, app, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
+class AddBillPage(QWidget):
+    def __init__(self, app, parent=None):
+        super().__init__(parent)
         self.app = app
+        self._setup_ui()
 
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
+    def _setup_ui(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
 
-        container = ctk.CTkFrame(self)
-        container.grid(row=0, column=0, padx=40, pady=30, sticky="nsew")
-        container.grid_columnconfigure(0, weight=1)
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setAlignment(Qt.AlignHCenter)
+        content_layout.setContentsMargins(36, 24, 36, 24)
+        content_layout.setSpacing(24)
 
-        ctk.CTkLabel(container, text="记一笔",
-                     font=ctk.CTkFont(size=24, weight="bold")).pack(pady=(25, 15))
+        # Header
+        content_layout.addWidget(make_title("记一笔"))
+        content_layout.addWidget(make_subtitle("快速记录一笔收入或支出"))
 
-        self.form = BillForm(container, app, on_save=self._on_saved)
-        self.form.pack(fill="x", padx=30, pady=(0, 25))
+        # Centered form card
+        form_container = QWidget()
+        form_container.setMaximumWidth(500)
+        form_layout = QVBoxLayout(form_container)
+        form_layout.setContentsMargins(0, 0, 0, 0)
+
+        card = Card(padding=(28, 28, 28, 28), spacing=20)
+        self.form = BillForm(self.app, on_save=self._on_saved)
+        card.content_layout().addWidget(self.form)
+        form_layout.addWidget(card)
+
+        content_layout.addWidget(form_container)
+        content_layout.addStretch()
+
+        scroll.setWidget(content)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
 
     def _on_saved(self):
-        messagebox.showinfo("成功", "账单已保存！")
+        QMessageBox.information(self, "成功", "账单已保存！")
         self.form.clear()
 
     def on_show(self):

@@ -1,115 +1,108 @@
-import customtkinter as ctk
+"""Profile page - consumer personality and health."""
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+                               QFrame, QScrollArea)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 
+from ui.theme import COLORS, set_css_class, FONT_FAMILY
+from ui.utils import make_label, make_title, make_heading, clear_layout
+from ui.components.card import Card
+from ui.components.progress_bar import ProgressBar
+from ui.components.empty_state import EmptyState
 from core.analytics import calculate_health_score, get_consumer_profile
 
 
-class ProfilePage(ctk.CTkFrame):
-    def __init__(self, master, app, **kwargs):
-        super().__init__(master, fg_color="transparent", **kwargs)
+class ProfilePage(QWidget):
+    def __init__(self, app, parent=None):
+        super().__init__(parent)
         self.app = app
         self.db = app.db
+        self._setup_ui()
 
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
+    def _setup_ui(self):
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
 
-        container = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        container.grid(row=0, column=0, sticky="nsew")
-        container.grid_columnconfigure(0, weight=1)
+        content = QWidget()
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(36, 24, 36, 24)
+        layout.setSpacing(24)
 
-        # ---- Header ----
-        ctk.CTkLabel(container, text="消费画像",
-                     font=ctk.CTkFont(size=26, weight="bold")).pack(
-            anchor="w", padx=25, pady=(25, 20))
+        # Header
+        layout.addWidget(make_title("消费画像"))
 
-        # ---- Personality Card ----
-        self.personality_card = ctk.CTkFrame(container, corner_radius=14)
-        self.personality_card.pack(fill="x", padx=25, pady=(0, 15))
+        # Personality Card
+        personality_card = Card(padding=(28, 28, 28, 28), spacing=12)
+        p_layout = personality_card.content_layout()
+        p_layout.setAlignment(Qt.AlignCenter)
 
-        self.emoji_label = ctk.CTkLabel(self.personality_card, text="",
-                                        font=ctk.CTkFont(size=56))
-        self.emoji_label.pack(pady=(22, 4))
+        self.emoji_label = QLabel()
+        self.emoji_label.setAlignment(Qt.AlignCenter)
+        emoji_font = QFont()
+        emoji_font.setPointSize(48)
+        self.emoji_label.setFont(emoji_font)
+        p_layout.addWidget(self.emoji_label)
 
-        self.personality_title = ctk.CTkLabel(
-            self.personality_card, text="",
-            font=ctk.CTkFont(size=22, weight="bold"),
-        )
-        self.personality_title.pack()
+        self.personality_title = make_label("", 22, True)
+        self.personality_title.setAlignment(Qt.AlignCenter)
+        p_layout.addWidget(self.personality_title)
 
-        self.personality_desc = ctk.CTkLabel(
-            self.personality_card, text="",
-            font=ctk.CTkFont(size=13),
-            text_color=("gray40", "gray60"),
-            wraplength=700,
-            justify="center",
-        )
-        self.personality_desc.pack(padx=30, pady=(6, 6))
+        self.personality_desc = make_label("", 14, color=COLORS['text_secondary'])
+        self.personality_desc.setWordWrap(True)
+        self.personality_desc.setMinimumHeight(60)
+        self.personality_desc.setAlignment(Qt.AlignCenter)
+        p_layout.addWidget(self.personality_desc)
 
-        # savings rate bar under personality
-        self.savings_bar_frame = ctk.CTkFrame(self.personality_card, fg_color="transparent")
-        self.savings_bar_frame.pack(fill="x", padx=40, pady=(4, 18))
+        layout.addWidget(personality_card)
 
-        self.savings_label = ctk.CTkLabel(
-            self.savings_bar_frame, text="",
-            font=ctk.CTkFont(size=12),
-            text_color=("gray45", "gray55"),
-        )
-        self.savings_label.pack(anchor="w", pady=(0, 4))
+        # Savings bar
+        self.savings_label = make_label("", 13, color=COLORS['text_tertiary'])
+        layout.addWidget(self.savings_label)
 
-        self.savings_bar_bg = ctk.CTkFrame(
-            self.savings_bar_frame,
-            fg_color=("gray90", "gray22"), height=18, corner_radius=9,
-        )
-        self.savings_bar_bg.pack(fill="x")
-        self.savings_bar_fill = ctk.CTkFrame(
-            self.savings_bar_bg, fg_color="#4CAF50", height=18, corner_radius=9,
-        )
-        self.savings_bar_fill.place(relx=0, rely=0, relheight=1, relwidth=0)
+        self.savings_bar = ProgressBar("储蓄率", 0, 100, color=COLORS['success'], show_value=True)
+        self.savings_bar.set_bar_width(600)
+        layout.addWidget(self.savings_bar)
 
-        # ---- Suggestion Card ----
-        self.suggestion_card = ctk.CTkFrame(container, corner_radius=12)
-        self.suggestion_card.pack(fill="x", padx=25, pady=(0, 15))
+        # Suggestion Card
+        suggestion_card = Card(padding=(20, 20, 20, 20), spacing=8)
+        s_layout = suggestion_card.content_layout()
+        s_layout.addWidget(make_heading("个性化建议"))
+        self.suggestion_text = make_label("", 14, color=COLORS['text_secondary'])
+        self.suggestion_text.setWordWrap(True)
+        s_layout.addWidget(self.suggestion_text)
+        layout.addWidget(suggestion_card)
 
-        ctk.CTkLabel(self.suggestion_card, text="💡 个性化建议",
-                     font=ctk.CTkFont(size=16, weight="bold")).pack(
-            anchor="w", padx=20, pady=(16, 6))
+        # Top categories
+        cat_section = QVBoxLayout()
+        cat_section.setSpacing(8)
+        cat_section.addWidget(make_heading("本月支出 Top 5"))
+        self.cat_list = QVBoxLayout()
+        self.cat_list.setSpacing(8)
+        cat_section.addLayout(self.cat_list)
+        layout.addLayout(cat_section)
 
-        self.suggestion_text = ctk.CTkLabel(
-            self.suggestion_card, text="",
-            font=ctk.CTkFont(size=13),
-            wraplength=700,
-            justify="left",
-        )
-        self.suggestion_text.pack(anchor="w", padx=20, pady=(0, 16))
+        # Health Card
+        health_card = Card(padding=(24, 24, 24, 24), spacing=12)
+        h_layout = health_card.content_layout()
+        h_layout.addWidget(make_heading("财务健康评分"))
 
-        # ---- Top Categories Card ----
-        self.cat_card = ctk.CTkFrame(container, corner_radius=12)
-        self.cat_card.pack(fill="x", padx=25, pady=(0, 15))
+        self.health_total_label = make_label("", 36, True)
+        self.health_total_label.setAlignment(Qt.AlignCenter)
+        h_layout.addWidget(self.health_total_label)
 
-        ctk.CTkLabel(self.cat_card, text="📂 本月支出 Top 5",
-                     font=ctk.CTkFont(size=16, weight="bold")).pack(
-            anchor="w", padx=20, pady=(16, 10))
+        self.health_breakdown = QVBoxLayout()
+        self.health_breakdown.setSpacing(10)
+        h_layout.addLayout(self.health_breakdown)
+        layout.addWidget(health_card)
 
-        self.cat_list = ctk.CTkFrame(self.cat_card, fg_color="transparent")
-        self.cat_list.pack(fill="x", padx=20, pady=(0, 16))
+        layout.addStretch()
 
-        # ---- Health Breakdown Card ----
-        self.health_card = ctk.CTkFrame(container, corner_radius=12)
-        self.health_card.pack(fill="x", padx=25, pady=(0, 25))
+        scroll.setWidget(content)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
 
-        ctk.CTkLabel(self.health_card, text="📊 财务健康评分详情",
-                     font=ctk.CTkFont(size=16, weight="bold")).pack(
-            anchor="w", padx=20, pady=(16, 4))
-
-        self.health_total_label = ctk.CTkLabel(
-            self.health_card, text="",
-            font=ctk.CTkFont(size=36, weight="bold"),
-        )
-        self.health_total_label.pack(pady=(0, 4))
-
-        self.health_breakdown = ctk.CTkFrame(self.health_card, fg_color="transparent")
-        self.health_breakdown.pack(fill="x", padx=20, pady=(4, 16))
-
-    # ==================================================================
     def on_show(self):
         self.refresh()
 
@@ -117,108 +110,52 @@ class ProfilePage(ctk.CTkFrame):
         profile = get_consumer_profile(self.db)
         health = calculate_health_score(self.db)
 
-        # --- Personality ---
-        self.emoji_label.configure(text=profile["emoji"])
-        self.personality_title.configure(text=profile["title"])
-        self.personality_desc.configure(text=profile["desc"])
+        # Personality
+        self.emoji_label.setText(profile["emoji"])
+        self.personality_title.setText(profile["title"])
+        self.personality_desc.setText(profile["desc"])
 
-        # savings bar
+        # Savings bar
         sr = profile["savings_rate"]
-        self.savings_label.configure(
-            text=f"本月储蓄率: {sr}%  "
-            f"({'收入 > 支出' if profile['balance'] >= 0 else '支出 > 收入'})"
-        )
-        bar_pct = min(sr / 100, 1.0)
-        self.savings_bar_fill.place(relx=0, rely=0, relheight=1, relwidth=max(bar_pct, 0.01))
+        self.savings_label.setText(f"本月储蓄率: {sr}%  ({'收入 > 支出' if profile['balance'] >= 0 else '支出 > 收入'})")
+        self.savings_bar.update(min(sr, 100), 100)
 
-        # --- Suggestion ---
-        self.suggestion_text.configure(text=profile["suggestion"])
+        # Suggestion
+        self.suggestion_text.setText(profile["suggestion"])
 
-        # --- Top categories ---
-        for w in self.cat_list.winfo_children():
-            w.destroy()
-
+        # Top categories
+        clear_layout(self.cat_list)
         top = profile["top_categories"]
         if not top:
-            ctk.CTkLabel(self.cat_list, text="暂无支出数据",
-                         font=ctk.CTkFont(size=12),
-                         text_color=("gray45", "gray55")).pack(pady=8)
+            self.cat_list.addWidget(EmptyState("📊", "暂无支出数据"))
         else:
             max_amt = top[0]["amount"] if top else 1
-            cat_colors = [
-                "#EF5350", "#FF7043", "#FFA726", "#42A5F5", "#7E57C2",
-            ]
+            cat_colors = ["#FF3B30", "#FF9500", "#FFCC00", "#007AFF", "#AF52DE"]
             for i, cat in enumerate(top):
-                self._add_cat_bar(
-                    cat["name"], cat["amount"], cat["pct"],
-                    max_amt, cat_colors[i % len(cat_colors)],
+                bar = ProgressBar(
+                    f"{cat['name']}  ¥{cat['amount']:,.0f}  {cat['pct']}%",
+                    cat['amount'], max_amt,
+                    color=cat_colors[i % len(cat_colors)],
+                    show_value=False
                 )
+                bar.set_label_width(200)
+                bar.set_bar_width(400)
+                self.cat_list.addWidget(bar)
 
-        # --- Health breakdown ---
+        # Health
         score = health["score"]
         color = health["color"]
-        self.health_total_label.configure(
-            text=f"{score} 分 · {health['label']}",
-            text_color=color,
-        )
+        self.health_total_label.setText(f"{score}分 · {health['label']}")
+        self.health_total_label.setStyleSheet(f"color: {color};")
 
-        for w in self.health_breakdown.winfo_children():
-            w.destroy()
-
+        clear_layout(self.health_breakdown)
         bd = health["breakdown"]
-        dim_colors = {
-            "savings": "#4CAF50",
-            "coverage": "#2196F3",
-            "consistency": "#FF9800",
-            "diversity": "#7E57C2",
-        }
+        dim_colors = {"savings": COLORS['success'], "coverage": COLORS['info'],
+                      "consistency": COLORS['warning'], "diversity": "#AF52DE"}
+
         for key in ["savings", "coverage", "consistency", "diversity"]:
             item = bd[key]
-            self._add_health_row(
-                item["label"], item["score"], item["max"],
-                dim_colors.get(key, "#888"),
-            )
-
-    def _add_cat_bar(self, name: str, amount: float, pct: float,
-                     max_amt: float, color: str):
-        row = ctk.CTkFrame(self.cat_list, fg_color="transparent")
-        row.pack(fill="x", pady=4)
-
-        ctk.CTkLabel(row, text=name, font=ctk.CTkFont(size=13),
-                     width=70, anchor="w").pack(side="left")
-
-        bar_bg = ctk.CTkFrame(row, fg_color=("gray90", "gray22"), height=20,
-                              corner_radius=10)
-        bar_bg.pack(side="left", fill="x", expand=True, padx=(8, 8))
-
-        rel = max_amt / 1 if max_amt == 0 else max_amt
-        bar_fill = ctk.CTkFrame(bar_bg, fg_color=color, height=20,
-                                corner_radius=10)
-        bar_fill.place(relx=0, rely=0, relheight=1,
-                       relwidth=max(amount / rel, 0.02))
-
-        ctk.CTkLabel(row, text=f"¥{amount:,.0f}  {pct}%",
-                     font=ctk.CTkFont(size=12),
-                     text_color=("gray40", "gray60"),
-                     width=90).pack(side="left")
-
-    def _add_health_row(self, label: str, score: int, max_val: int, color: str):
-        row = ctk.CTkFrame(self.health_breakdown, fg_color="transparent")
-        row.pack(fill="x", pady=5)
-
-        ctk.CTkLabel(row, text=label, font=ctk.CTkFont(size=13, weight="bold"),
-                     width=70, anchor="w").pack(side="left")
-
-        bar_bg = ctk.CTkFrame(row, fg_color=("gray90", "gray22"), height=18,
-                              corner_radius=9)
-        bar_bg.pack(side="left", fill="x", expand=True, padx=(10, 10))
-
-        pct = score / max_val if max_val > 0 else 0
-        bar_fill = ctk.CTkFrame(bar_bg, fg_color=color, height=18,
-                                corner_radius=9)
-        bar_fill.place(relx=0, rely=0, relheight=1, relwidth=max(pct, 0.03))
-
-        ctk.CTkLabel(row, text=f"{score} / {max_val}",
-                     font=ctk.CTkFont(size=12),
-                     text_color=("gray40", "gray60"),
-                     width=44).pack(side="left")
+            bar = ProgressBar(item["label"], item["score"], item["max"],
+                              color=dim_colors.get(key, COLORS['primary']), show_value=True)
+            bar.set_bar_width(350)
+            self.health_breakdown.addWidget(bar)

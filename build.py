@@ -17,6 +17,12 @@ MAIN_SCRIPT = PROJECT_DIR / "main.py"
 
 
 def get_pyinstaller_cmd(dist_dir: str) -> list:
+    assets_src = str(PROJECT_DIR / "assets")
+    if sys.platform == "win32":
+        assets_arg = f"{assets_src};assets"
+    else:
+        assets_arg = f"{assets_src}:assets"
+
     return [
         sys.executable, "-m", "PyInstaller",
         "--onefile",
@@ -25,6 +31,18 @@ def get_pyinstaller_cmd(dist_dir: str) -> list:
         "--distpath", dist_dir,
         "--workpath", str(Path(dist_dir) / "build_temp"),
         "--specpath", str(Path(dist_dir) / "build_temp"),
+        "--add-data", assets_arg,
+        "--collect-all", "ui",
+        "--collect-all", "core",
+        "--collect-all", "utils",
+        "--hidden-import", "PySide6",
+        "--hidden-import", "PySide6.QtWidgets",
+        "--hidden-import", "PySide6.QtCore",
+        "--hidden-import", "PySide6.QtGui",
+        "--hidden-import", "numpy",
+        "--hidden-import", "PIL",
+        "--hidden-import", "matplotlib",
+        "--hidden-import", "matplotlib.backends.backend_qtagg",
         str(MAIN_SCRIPT),
     ]
 

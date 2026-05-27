@@ -148,6 +148,14 @@ PERSONALITIES = [
         "desc": "医疗健康方面的支出较高，照顾好自己的身体是头等大事。",
         "suggestion": "考虑配置合适的健康保险，定期体检比生病后再治疗更划算。",
     },
+    {
+        "key": "balanced",
+        "condition": lambda cats, rate: True,  # catch-all default
+        "emoji": "⚖️",
+        "title": "均衡型",
+        "desc": "你的消费结构比较均衡，没有单一类别过度集中，这是很好的理财习惯。",
+        "suggestion": "保持当前的消费节奏，可以尝试制定月度预算来进一步优化。",
+    },
 ]
 
 
@@ -173,17 +181,16 @@ def get_consumer_profile(db) -> dict:
         top_categories.append({"name": name, "amount": val, "pct": pct})
     top_categories.sort(key=lambda x: x["amount"], reverse=True)
 
-    # match personality
-    personality = PERSONALITIES[-1]  # default: balanced
+    # match personality — "balanced" is last (always-True condition), acts as default
+    personality = PERSONALITIES[-1]
     for p in PERSONALITIES[:-1]:
         if p["condition"](cat_pct, savings_rate):
             personality = p
             break
 
-    if personality["key"] == "saver":
-        pass  # keep saver
-    elif savings_rate > 50:
-        personality = PERSONALITIES[1]  # saver overrides others
+    # saver takes priority if savings rate is high
+    if personality["key"] != "saver" and savings_rate > 50:
+        personality = next(p for p in PERSONALITIES if p["key"] == "saver")
 
     return {
         "emoji": personality["emoji"],

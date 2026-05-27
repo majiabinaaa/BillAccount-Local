@@ -1,45 +1,92 @@
-import customtkinter as ctk
+"""Main application window using PySide6 with Apple-style design."""
+import sys
+import os
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout
+from PySide6.QtCore import Qt, QSize
+from PySide6.QtGui import QFont, QFontDatabase, QIcon
 
 from core.config_manager import ConfigManager
 from core.database import Database
+from ui.theme import STYLESHEET, FONT_FAMILY
+from ui.sidebar import Sidebar
 from ui.main_window import MainWindow
 
 
-class App(ctk.CTk):
+def _load_custom_fonts():
+    """Load custom fonts from the assets/fonts directory."""
+    assets_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "fonts")
+    if not os.path.isdir(assets_dir):
+        return
+    for fname in os.listdir(assets_dir):
+        if fname.lower().endswith((".ttf", ".otf")):
+            fpath = os.path.join(assets_dir, fname)
+            QFontDatabase.addApplicationFont(fpath)
+
+
+class App(QMainWindow):
     def __init__(self):
         super().__init__()
+
+        _load_custom_fonts()
 
         self.config = ConfigManager()
         self.db = Database(self.config.data_path)
 
-        ctk.set_appearance_mode(self.config.theme)
-        ctk.set_default_color_theme("blue")
+        # Apply system font globally
+        font = QFont()
+        font.setFamily(FONT_FAMILY)
+        font.setPointSize(14)
+        QApplication.instance().setFont(font)
 
-        self.title("记账本")
+        # Window setup
+        self.setWindowTitle("记账本")
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "appearance.ico")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+        self.setMinimumSize(1000, 650)
 
-        # clamp window size to screen
-        self.update_idletasks()
-        sw = self.winfo_screenwidth()
-        sh = self.winfo_screenheight()
-        max_w = int(sw * 0.88)
-        max_h = int(sh * 0.85)
-        win_w = min(self.config.get("window_width", 1050), max_w)
-        win_h = min(self.config.get("window_height", 700), max_h)
-        self.geometry(f"{win_w}x{win_h}")
-        self.minsize(900, 600)
+        # Restore window size
+        win_w = self.config.get("window_width", 1100)
+        win_h = self.config.get("window_height", 720)
+        self.resize(win_w, win_h)
 
-        # center on screen
-        x = (sw - win_w) // 2
-        y = (sh - win_h) // 2
-        self.geometry(f"+{x}+{y}")
+        # Center on screen
+        screen = QApplication.primaryScreen().geometry()
+        x = (screen.width() - win_w) // 2
+        y = (screen.height() - win_h) // 2
+        self.move(x, y)
 
-        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        # Apply stylesheet
+        self.setStyleSheet(STYLESHEET)
 
+        # Create central widget and layout
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        layout = QHBoxLayout(central_widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Create sidebar
+        self.sidebar = Sidebar(self)
+        layout.addWidget(self.sidebar)
+
+        # Create main content area
         self.main_window = MainWindow(self)
-        self.main_window.pack(fill="both", expand=True)
+        layout.addWidget(self.main_window)
 
+        # Connect sidebar navigation to main window
+        self.sidebar.navigate_signal.connect(self.main_window.show_page)
+
+        # Register pages
         self._register_pages()
-        self.main_window.show_page("dashboard")
+
+        # Show dashboard by default
+        self.sidebar.navigate("dashboard")
+
+        # Restore saved background
+        saved_bg = self.config.get("background_path", "")
+        if saved_bg:
+            self.main_window.set_background(saved_bg)
 
     def _register_pages(self):
         from ui.pages.dashboard import DashboardPage
@@ -58,11 +105,14 @@ class App(ctk.CTk):
         self.main_window.register_page("export_page", ExportPage)
         self.main_window.register_page("settings", SettingsPage)
 
+        from ui.pages.bg_select import BgSelectPage
+        self.main_window.register_page("bg_select", BgSelectPage)
+
     def reload_database(self):
         self.db = Database(self.config.data_path)
         self.main_window.refresh_all()
 
-    def _on_close(self):
-        self.config.set("window_width", self.winfo_width())
-        self.config.set("window_height", self.winfo_height())
-        self.destroy()
+    def closeEvent(self, event):
+        self.config.set("window_width", self.width())
+        self.config.set("window_height", self.height())
+        event.accept()
