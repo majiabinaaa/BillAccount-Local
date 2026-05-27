@@ -205,7 +205,7 @@ class ExportPage(QWidget):
 
         from ui.components.styled_combo import StyledComboBox
         self.month_combo = StyledComboBox()
-        self.month_combo.setFixedWidth(60)
+        self.month_combo.setFixedWidth(70)
         self.month_combo.addItems([str(m) for m in range(1, 13)])
         self.month_combo.setCurrentText(str(date.today().month))
         monthly_row.addWidget(self.month_combo)

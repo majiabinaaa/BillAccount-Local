@@ -41,6 +41,7 @@ def get_pyinstaller_cmd(dist_dir: str) -> list:
         "--hidden-import", "PySide6.QtGui",
         "--hidden-import", "numpy",
         "--hidden-import", "PIL",
+        "--hidden-import", "ui.components.styled_combo",
         "--hidden-import", "matplotlib",
         "--hidden-import", "matplotlib.backends.backend_qtagg",
         str(MAIN_SCRIPT),

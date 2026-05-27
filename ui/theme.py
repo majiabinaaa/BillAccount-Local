@@ -350,7 +350,7 @@ def _input_styles():
         padding: 8px 12px;
         min-height: 28px;
         color: {c['text_primary']};
-        background: transparent;
+        background-color: {c['surface']};
     }}
     QComboBox QAbstractItemView::item:hover {{
         background-color: {c['hover']};
