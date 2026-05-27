@@ -56,8 +56,8 @@ class App(QMainWindow):
         y = (screen.height() - win_h) // 2
         self.move(x, y)
 
-        # Apply stylesheet
-        self.setStyleSheet(STYLESHEET)
+        # Apply stylesheet at QApplication level so it reaches top-level popups
+        QApplication.instance().setStyleSheet(STYLESHEET)
 
         # Create central widget and layout
         central_widget = QWidget()

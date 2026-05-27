@@ -55,7 +55,8 @@ class BillListPage(QWidget):
         self.end_date.setMinimumWidth(130)
         filter_layout.addWidget(self.end_date)
 
-        self.type_combo = QComboBox()
+        from ui.components.styled_combo import StyledComboBox
+        self.type_combo = StyledComboBox()
         self.type_combo.addItems(["全部", "支出", "收入"])
         self.type_combo.setFixedHeight(36)
         self.type_combo.setMinimumWidth(80)

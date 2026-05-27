@@ -71,7 +71,8 @@ class BillForm(QWidget):
         cat_col = QVBoxLayout()
         cat_col.setSpacing(8)
         cat_col.addWidget(make_label("分类", 14, True))
-        self.category_combo = QComboBox()
+        from ui.components.styled_combo import StyledComboBox
+        self.category_combo = StyledComboBox()
         self.category_combo.setFixedHeight(40)
         cat_col.addWidget(self.category_combo)
         row.addLayout(cat_col, 1)

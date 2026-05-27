@@ -195,14 +195,16 @@ class ExportPage(QWidget):
         monthly_row.setSpacing(8)
         monthly_row.addWidget(make_label("月报", 13, color=COLORS['text_secondary']))
 
-        self.month_year_combo = QComboBox()
+        from ui.components.styled_combo import StyledComboBox
+        self.month_year_combo = StyledComboBox()
         self.month_year_combo.setFixedWidth(80)
         self.month_year_combo.addItems([str(y) for y in range(2020, 2031)])
         self.month_year_combo.setCurrentText(str(date.today().year))
         monthly_row.addWidget(self.month_year_combo)
         monthly_row.addWidget(make_label("年", 13))
 
-        self.month_combo = QComboBox()
+        from ui.components.styled_combo import StyledComboBox
+        self.month_combo = StyledComboBox()
         self.month_combo.setFixedWidth(60)
         self.month_combo.addItems([str(m) for m in range(1, 13)])
         self.month_combo.setCurrentText(str(date.today().month))
@@ -217,7 +219,8 @@ class ExportPage(QWidget):
         yearly_row.setSpacing(8)
         yearly_row.addWidget(make_label("年报", 13, color=COLORS['text_secondary']))
 
-        self.year_combo = QComboBox()
+        from ui.components.styled_combo import StyledComboBox
+        self.year_combo = StyledComboBox()
         self.year_combo.setFixedWidth(80)
         self.year_combo.addItems([str(y) for y in range(2020, 2031)])
         self.year_combo.setCurrentText(str(date.today().year))
