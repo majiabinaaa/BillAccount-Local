@@ -88,6 +88,14 @@ BillAccount/
 
 MIT License
 
+### 更新历史
+
+| 版本 | 日期 | 说明 |
+|------|------|------|
+| V2.3 | 2026-05-28 | 修复所有弹窗黑屏问题，修复操作栏按钮透明，优化编辑对话框 |
+| V2.2 | 2026-05-27 | 修复按钮/下拉框透明问题，新增 StyledComboBox 组件 |
+| V2.1 | 2026-05-27 | 新增背景选择功能（12角色36图），新增消费画像页面 |
+
 ---
 
 ## English
@@ -171,3 +179,11 @@ BillAccount/
 ### License
 
 MIT License
+
+### Changelog
+
+| Version | Date | Description |
+|---------|------|-------------|
+| V2.3 | 2026-05-28 | Fix dialog black screen, fix transparent action buttons, improve edit dialog |
+| V2.2 | 2026-05-27 | Fix button/combobox transparency, add StyledComboBox component |
+| V2.1 | 2026-05-27 | Add background selection (12 characters, 36 images), add consumer profile page |

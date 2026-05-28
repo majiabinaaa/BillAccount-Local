@@ -1,7 +1,7 @@
 """Export page - export reports as PNG."""
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QFrame, QScrollArea, QComboBox,
-                               QMessageBox, QFileDialog)
+                               QFileDialog, QMessageBox)
 from PySide6.QtCore import Qt, QDate, QThread, Signal
 from PySide6.QtGui import QFont
 
@@ -14,6 +14,7 @@ import subprocess
 from ui.theme import COLORS, set_css_class, FONT_FAMILY
 from ui.utils import make_label, make_title, make_subtitle, make_heading
 from ui.components.card import Card
+from ui.dialogs import show_info, show_error, show_warning, show_question_yes_default
 
 
 class ExportWorker(QThread):
@@ -261,7 +262,7 @@ class ExportPage(QWidget):
 
     def _ask_and_export(self, report_type):
         if self._worker and self._worker.isRunning():
-            QMessageBox.warning(self, "请稍候", "正在生成报告，请等待完成后再试。")
+            show_warning(self, "请稍候", "正在生成报告，请等待完成后再试。")
             return
 
         titles = {"weekly": "周报", "monthly": "月报", "yearly": "年报"}
@@ -313,13 +314,12 @@ class ExportPage(QWidget):
     def _on_result(self, ok, err):
         self.status_label.setText("")
         if ok:
-            reply = QMessageBox.information(self, "导出成功",
-                                            f"报告已生成！\n\n{self._last_path}\n\n是否打开查看？",
-                                            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+            reply = show_question_yes_default(self, "导出成功",
+                                            f"报告已生成！\n\n{self._last_path}\n\n是否打开查看？")
             if reply == QMessageBox.Yes:
                 self._ask_open(self._last_path)
         else:
-            QMessageBox.critical(self, "导出失败", err)
+            show_error(self, "导出失败", err)
 
     def _ask_open(self, path):
         try:

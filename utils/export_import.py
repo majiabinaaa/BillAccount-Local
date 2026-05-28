@@ -1,6 +1,7 @@
 """File-dialog-based export/import helpers for use in the UI."""
 
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QFileDialog
+from ui.dialogs import show_info, show_error, show_warning
 
 
 def export_csv_dialog(app):
@@ -11,9 +12,9 @@ def export_csv_dialog(app):
         return
     try:
         app.db.export_to_csv(filepath)
-        QMessageBox.information(None, "导出成功", f"数据已导出到:\n{filepath}")
+        show_info(None, "导出成功", f"数据已导出到:\n{filepath}")
     except Exception as e:
-        QMessageBox.critical(None, "导出失败", str(e))
+        show_error(None, "导出失败", str(e))
 
 
 def import_csv_dialog(app):
@@ -28,15 +29,15 @@ def import_csv_dialog(app):
             detail = "\n".join(errors[:10])
             if len(errors) > 10:
                 detail += f"\n... 共 {len(errors)} 条错误"
-            QMessageBox.warning(
+            show_warning(
                 None, "导入完成",
                 f"成功导入 {count} 条记录，{len(errors)} 条跳过:\n{detail}",
             )
         else:
-            QMessageBox.information(None, "导入成功", f"成功导入 {count} 条账单记录")
+            show_info(None, "导入成功", f"成功导入 {count} 条账单记录")
         app.main_window.refresh_all()
     except Exception as e:
-        QMessageBox.critical(None, "导入失败", str(e))
+        show_error(None, "导入失败", str(e))
 
 
 def export_json_dialog(app):
@@ -47,9 +48,9 @@ def export_json_dialog(app):
         return
     try:
         app.db.export_to_json(filepath)
-        QMessageBox.information(None, "导出成功", f"完整数据已备份到:\n{filepath}")
+        show_info(None, "导出成功", f"完整数据已备份到:\n{filepath}")
     except Exception as e:
-        QMessageBox.critical(None, "导出失败", str(e))
+        show_error(None, "导出失败", str(e))
 
 
 def import_json_dialog(app):
@@ -60,7 +61,7 @@ def import_json_dialog(app):
         return
     try:
         count = app.db.import_from_json(filepath)
-        QMessageBox.information(None, "导入成功", f"成功导入 {count} 条账单记录")
+        show_info(None, "导入成功", f"成功导入 {count} 条账单记录")
         app.main_window.refresh_all()
     except Exception as e:
-        QMessageBox.critical(None, "导入失败", str(e))
+        show_error(None, "导入失败", str(e))

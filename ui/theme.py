@@ -166,6 +166,10 @@ def _card_styles():
 def _button_styles():
     c = COLORS
     return f"""
+    QPushButton {{
+        color: {c['text_primary']};
+        font-family: {FONT_FAMILY};
+    }}
     QPushButton[cssClass="primary-btn"] {{
         background-color: {c['primary']};
         color: {c['text_white']};

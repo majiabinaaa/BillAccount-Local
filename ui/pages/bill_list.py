@@ -1,16 +1,19 @@
 """Bill list page - clean table with refined filters."""
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QFrame, QTableWidget, QTableWidgetItem,
-                               QLineEdit, QComboBox, QHeaderView, QMessageBox,
+                               QLineEdit, QComboBox, QHeaderView,
                                QDialog, QDateEdit, QCalendarWidget)
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QFont, QColor
+from PySide6.QtWidgets import QMessageBox
 
 from datetime import date
 from ui.theme import COLORS, set_css_class, FONT_FAMILY
 from ui.utils import make_label, make_title, make_subtitle
 from ui.components.empty_state import EmptyState
 from core.models import Bill
+from ui.dialogs import show_question
+from ui.custom_dialog import create_styled_dialog
 
 
 class BillListPage(QWidget):
@@ -239,6 +242,7 @@ class BillListPage(QWidget):
 
         # Action buttons
         action_widget = QWidget()
+        action_widget.setStyleSheet("background-color: white;")
         action_layout = QHBoxLayout(action_widget)
         action_layout.setContentsMargins(4, 4, 4, 4)
         action_layout.setSpacing(4)
@@ -247,15 +251,18 @@ class BillListPage(QWidget):
         edit_btn.setCursor(Qt.PointingHandCursor)
         edit_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: transparent;
-                border: none;
+                background-color: {COLORS['primary_light']};
+                border: 1px solid {COLORS['primary']};
                 color: {COLORS['primary']};
                 font-size: 12px;
-                padding: 4px 8px;
+                padding: 4px 10px;
                 font-family: {FONT_FAMILY};
+                border-radius: 4px;
+                font-weight: 500;
             }}
             QPushButton:hover {{
-                color: {COLORS['primary_hover']};
+                background-color: {COLORS['primary']};
+                color: white;
             }}
         """)
         edit_btn.clicked.connect(lambda checked, b=bill: self._show_edit(b))
@@ -265,15 +272,18 @@ class BillListPage(QWidget):
         del_btn.setCursor(Qt.PointingHandCursor)
         del_btn.setStyleSheet(f"""
             QPushButton {{
-                background-color: transparent;
-                border: none;
+                background-color: {COLORS['danger_light']};
+                border: 1px solid {COLORS['danger']};
                 color: {COLORS['danger']};
                 font-size: 12px;
-                padding: 4px 8px;
+                padding: 4px 10px;
                 font-family: {FONT_FAMILY};
+                border-radius: 4px;
+                font-weight: 500;
             }}
             QPushButton:hover {{
-                color: #E0302A;
+                background-color: {COLORS['danger']};
+                color: white;
             }}
         """)
         del_btn.clicked.connect(lambda checked, b=bill: self._delete_bill(b))
@@ -282,8 +292,7 @@ class BillListPage(QWidget):
         self.table.setCellWidget(row, 5, action_widget)
 
     def _delete_bill(self, bill: Bill):
-        reply = QMessageBox.question(self, "确认删除", f"确定要删除这笔账单吗？\n¥{bill.amount:,.2f}",
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        reply = show_question(self, "确认删除", f"确定要删除这笔账单吗？\n¥{bill.amount:,.2f}")
         if reply == QMessageBox.Yes:
             self.db.delete_bill(bill.id)
             self._load_bills()
@@ -291,14 +300,22 @@ class BillListPage(QWidget):
     def _show_edit(self, bill: Bill):
         dialog = QDialog(self)
         dialog.setWindowTitle("编辑账单")
-        dialog.setFixedSize(480, 440)
+        dialog.setMinimumSize(520, 520)
         dialog.setWindowModality(Qt.WindowModal)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {COLORS['surface']};
+            }}
+        """)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(24, 20, 24, 24)
+        layout.setSpacing(16)
 
         from ui.components.bill_form import BillForm
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(24, 24, 24, 24)
         form = BillForm(self.app, bill=bill, on_save=lambda: [self._load_bills(), dialog.accept()])
         layout.addWidget(form)
+
         dialog.exec()
 
     def on_show(self):

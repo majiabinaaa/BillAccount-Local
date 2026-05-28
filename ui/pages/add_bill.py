@@ -1,10 +1,11 @@
 """Add bill page - centered form layout."""
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QFrame, QScrollArea, QMessageBox
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QFrame, QScrollArea
 from PySide6.QtCore import Qt
 
 from ui.components.bill_form import BillForm
 from ui.components.card import Card
 from ui.utils import make_title, make_subtitle
+from ui.dialogs import show_info
 
 
 class AddBillPage(QWidget):
@@ -48,7 +49,7 @@ class AddBillPage(QWidget):
         main_layout.addWidget(scroll)
 
     def _on_saved(self):
-        QMessageBox.information(self, "成功", "账单已保存！")
+        show_info(self, "成功", "账单已保存！")
         self.form.clear()
 
     def on_show(self):

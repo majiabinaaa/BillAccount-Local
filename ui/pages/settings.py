@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QPushButton, QFrame, QLineEdit, QFileDialog,
-                               QMessageBox, QScrollArea)
+                               QScrollArea, QMessageBox)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 
@@ -16,6 +16,7 @@ from utils.export_import import (
     export_csv_dialog, import_csv_dialog,
     export_json_dialog, import_json_dialog,
 )
+from ui.dialogs import show_info, show_error, show_question
 
 
 class SettingsPage(QWidget):
@@ -210,7 +211,7 @@ class SettingsPage(QWidget):
             try:
                 shutil.copy2(src_path, new_path)
             except Exception as e:
-                QMessageBox.critical(self, "错误", f"复制数据库失败:\n{e}")
+                show_error(self, "错误", f"复制数据库失败:\n{e}")
                 return
 
         self.app.config.data_path = new_path
@@ -218,21 +219,16 @@ class SettingsPage(QWidget):
 
         count = self.app.db.get_bill_count()
         self.path_entry.setText(new_path)
-        QMessageBox.information(
-            self, "成功",
-            f"数据路径已更改到:\n{new_path}\n\n当前账单数: {count} 条"
-        )
+        show_info(self, "成功", f"数据路径已更改到:\n{new_path}\n\n当前账单数: {count} 条")
 
     def _clear_all(self):
-        reply = QMessageBox.question(
+        reply = show_question(
             self, "确认清空",
-            "确定要清空所有账单数据吗？\n此操作不可撤销！",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            "确定要清空所有账单数据吗？\n此操作不可撤销！"
         )
         if reply == QMessageBox.Yes:
             self.app.db.delete_all_bills()
-            QMessageBox.information(self, "成功", "所有账单数据已清空")
+            show_info(self, "成功", "所有账单数据已清空")
             self.app.main_window.refresh_all()
 
     def on_show(self):

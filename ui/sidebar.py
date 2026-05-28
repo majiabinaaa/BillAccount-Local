@@ -83,7 +83,7 @@ class Sidebar(QWidget):
         layout.addStretch()
 
         # Version
-        version = QLabel("v2.2 · Provided by 笨拙")
+        version = QLabel("v2.3 · Provided by 笨拙")
         version.setObjectName("sidebar_version")
         version.setAlignment(Qt.AlignLeft)
         layout.addWidget(version)
